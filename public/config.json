@@ -1,5 +1,6 @@
 {
   "workflowApiVersion": "1.1",
+  "key": "REST-ACTIVITY-POST-CALLER",
   "metaData": {
     "icon": "images/icon.svg",
     "category": "message",

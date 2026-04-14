@@ -2,7 +2,7 @@
 
 var connection = new Postmonger.Session();
 var activityPayload = {};
-var schema = {};
+var schemaFields = [];
 
 // ---- Journey Builder lifecycle events ----
 
@@ -20,8 +20,11 @@ connection.on('initActivity', function(payload) {
 });
 
 connection.on('requestedSchema', function(data) {
-  schema = data;
-  console.log('[CA] schema', JSON.stringify(schema));
+  console.log('[CA] schema', JSON.stringify(data));
+  schemaFields = parseSchema(data);
+  console.log('[CA] parsed fields', JSON.stringify(schemaFields));
+  // Update any existing journey dropdowns with the schema fields
+  updateAllJourneyDropdowns();
 });
 
 connection.on('clickedNext', function() {
@@ -33,9 +36,35 @@ connection.on('clickedBack', function() {
   connection.trigger('prevStep');
 });
 
-connection.on('gotoStep', function(step) {
+connection.on('gotoStep', function() {
   // single step wizard
 });
+
+// ---- Parse schema into field list ----
+
+function parseSchema(data) {
+  var fields = [];
+  if (!data || !data.schema) return fields;
+
+  var schemaItems = data.schema;
+  for (var i = 0; i < schemaItems.length; i++) {
+    var item = schemaItems[i];
+    var key = item.key;
+    var name = item.name || key;
+
+    // Extract readable field name from the key
+    // Keys look like: "Event.DEAudience-XXXXX.FieldName"
+    var parts = key.split('.');
+    var fieldName = parts[parts.length - 1];
+
+    fields.push({
+      key: '{{' + key + '}}',
+      label: fieldName,
+      fullName: name
+    });
+  }
+  return fields;
+}
 
 // ---- Restore saved config into UI ----
 
@@ -59,7 +88,6 @@ function restoreConfig(args) {
   for (var key in args) {
     if (!key.startsWith('_')) {
       var value = args[key];
-      // Check if it's a journey data binding (contains {{)
       var isJourney = typeof value === 'string' && value.indexOf('{{') !== -1;
       addField(key, isJourney ? 'journey' : 'fixed', value);
     }
@@ -92,16 +120,15 @@ function saveConfig() {
   fieldRows.forEach(function(row) {
     var name = row.querySelector('.fname').value.trim();
     var type = row.querySelector('.ftype').value;
-    var value = row.querySelector('.fvalue').value.trim();
 
     if (!name) return;
 
     if (type === 'journey') {
-      // Journey data: use the selected data binding
-      inArgs[name] = value;
+      var select = row.querySelector('.fvalue-select');
+      inArgs[name] = select ? select.value : '';
     } else {
-      // Fixed value
-      inArgs[name] = value;
+      var input = row.querySelector('.fvalue');
+      inArgs[name] = input ? input.value.trim() : '';
     }
   });
 
@@ -118,10 +145,29 @@ function saveConfig() {
 
 // ---- Dynamic field management ----
 
+function buildJourneySelect(selectedValue) {
+  var html = '<select class="fvalue-select">';
+  html += '<option value="">-- Selecione um campo --</option>';
+  for (var i = 0; i < schemaFields.length; i++) {
+    var f = schemaFields[i];
+    var sel = (selectedValue && selectedValue === f.key) ? ' selected' : '';
+    html += '<option value="' + escapeAttr(f.key) + '"' + sel + '>' + escapeAttr(f.label) + '</option>';
+  }
+  html += '</select>';
+  return html;
+}
+
 function addField(name, type, value) {
   var container = document.getElementById('fields-container');
   var row = document.createElement('div');
   row.className = 'field-row';
+
+  var valueHtml;
+  if (type === 'journey') {
+    valueHtml = buildJourneySelect(value);
+  } else {
+    valueHtml = '<input type="text" class="fvalue" placeholder="valor fixo" value="' + escapeAttr(value || '') + '">';
+  }
 
   row.innerHTML =
     '<input type="text" class="fname" placeholder="nome_campo" value="' + escapeAttr(name || '') + '">' +
@@ -129,7 +175,7 @@ function addField(name, type, value) {
       '<option value="fixed"' + (type === 'fixed' || !type ? ' selected' : '') + '>Valor Fixo</option>' +
       '<option value="journey"' + (type === 'journey' ? ' selected' : '') + '>Dado da Jornada</option>' +
     '</select>' +
-    '<input type="text" class="fvalue" placeholder="' + (type === 'journey' ? '{{Contact.Attribute.NomeDe.Campo}}' : 'valor fixo') + '" value="' + escapeAttr(value || '') + '">' +
+    valueHtml +
     '<button class="btn btn-remove" onclick="removeRow(this)" title="Remover">&times;</button>';
 
   container.appendChild(row);
@@ -154,12 +200,35 @@ function removeRow(btn) {
 
 function onTypeChange(select) {
   var row = select.closest('.field-row');
-  var input = row.querySelector('.fvalue');
+  // Remove existing value element (input or select)
+  var oldInput = row.querySelector('.fvalue');
+  var oldSelect = row.querySelector('.fvalue-select');
+  if (oldInput) oldInput.remove();
+  if (oldSelect) oldSelect.remove();
+
+  // Insert new element before the remove button
+  var removeBtn = row.querySelector('.btn-remove');
   if (select.value === 'journey') {
-    input.placeholder = '{{Contact.Attribute.NomeDe.Campo}}';
+    var wrapper = document.createElement('span');
+    wrapper.innerHTML = buildJourneySelect('');
+    row.insertBefore(wrapper.firstChild, removeBtn);
   } else {
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'fvalue';
     input.placeholder = 'valor fixo';
+    row.insertBefore(input, removeBtn);
   }
+}
+
+function updateAllJourneyDropdowns() {
+  var selects = document.querySelectorAll('.fvalue-select');
+  selects.forEach(function(sel) {
+    var currentVal = sel.value;
+    var wrapper = document.createElement('span');
+    wrapper.innerHTML = buildJourneySelect(currentVal);
+    sel.parentNode.replaceChild(wrapper.firstChild, sel);
+  });
 }
 
 function escapeAttr(str) {
@@ -177,6 +246,6 @@ connection.on('requestedInteraction', function(settings) {
   console.log('[CA] requestedInteraction', JSON.stringify(settings));
 });
 
-// Tell Journey Builder we're ready — only once
+// Tell Journey Builder we're ready
 connection.trigger('ready');
 connection.trigger('requestSchema');

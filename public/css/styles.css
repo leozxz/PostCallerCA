@@ -114,7 +114,8 @@ h3 {
   width: 150px;
 }
 
-.field-row .fvalue {
+.field-row .fvalue,
+.field-row .fvalue-select {
   flex: 1.5;
 }
 

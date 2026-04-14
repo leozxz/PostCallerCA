@@ -17,8 +17,6 @@ connection.on('initActivity', function(payload) {
   if (args && args.length > 0) {
     restoreConfig(args[0]);
   }
-
-  connection.trigger('updateActivity', activityPayload);
 });
 
 connection.on('requestedSchema', function(data) {

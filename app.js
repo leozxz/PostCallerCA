@@ -16,7 +16,7 @@ app.get('/config.json', (req, res) => {
     workflowApiVersion: '1.1',
     key: process.env.ACTIVITY_KEY || 'REST-ACTIVITY-POST-CALLER',
     metaData: {
-      icon: 'images/icon.png',
+      icon: 'images/icon.svg',
       category: 'message',
       isConfigured: false
     },

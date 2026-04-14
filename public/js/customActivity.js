@@ -18,7 +18,7 @@ connection.on('initActivity', function(payload) {
     restoreConfig(args[0]);
   }
 
-  connection.trigger('ready');
+  connection.trigger('updateActivity', activityPayload);
 });
 
 connection.on('requestedSchema', function(data) {
@@ -175,6 +175,10 @@ function escapeAttr(str) {
 
 // ---- Initialize ----
 
-// Tell Journey Builder we're ready
+connection.on('requestedInteraction', function(settings) {
+  console.log('[CA] requestedInteraction', JSON.stringify(settings));
+});
+
+// Tell Journey Builder we're ready — only once
 connection.trigger('ready');
 connection.trigger('requestSchema');

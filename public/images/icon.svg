@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50" width="50" height="50">
+  <rect width="50" height="50" rx="8" fill="#0070d2"/>
+  <text x="25" y="22" text-anchor="middle" fill="white" font-family="Arial,sans-serif" font-size="10" font-weight="bold">API</text>
+  <text x="25" y="36" text-anchor="middle" fill="white" font-family="Arial,sans-serif" font-size="9" font-weight="bold">POST</text>
+</svg>

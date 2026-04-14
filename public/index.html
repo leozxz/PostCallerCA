@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API POST - Custom Activity</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <h2>Configurar chamada API</h2>
+
+  <!-- URL e Metodo -->
+  <div class="section">
+    <h3>Endpoint</h3>
+    <div class="method-row">
+      <div class="form-group">
+        <label>Metodo</label>
+        <select id="httpMethod">
+          <option value="POST">POST</option>
+          <option value="PUT">PUT</option>
+          <option value="PATCH">PATCH</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>URL da API</label>
+        <input type="text" id="targetUrl" placeholder="https://api.exemplo.com/endpoint">
+      </div>
+    </div>
+  </div>
+
+  <!-- Headers -->
+  <div class="section">
+    <h3>Headers (opcional)</h3>
+    <div id="headers-container"></div>
+    <button class="btn btn-add" onclick="addHeader()">+ Adicionar Header</button>
+  </div>
+
+  <!-- Campos do Body -->
+  <div class="section">
+    <h3>Campos do Body (JSON)</h3>
+
+    <div class="header-row">
+      <span class="fname">Nome do campo</span>
+      <span class="ftype">Tipo</span>
+      <span class="fvalue">Valor</span>
+      <span class="faction"></span>
+    </div>
+
+    <div id="fields-container"></div>
+
+    <button class="btn btn-add" onclick="addField()">+ Adicionar Campo</button>
+  </div>
+
+  <script src="js/postmonger.js"></script>
+  <script src="js/customActivity.js"></script>
+</body>
+</html>

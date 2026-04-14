@@ -1,0 +1,220 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f4f6f9;
+  color: #16325c;
+  padding: 20px;
+  font-size: 14px;
+}
+
+h2 {
+  font-size: 18px;
+  margin-bottom: 16px;
+  color: #16325c;
+}
+
+h3 {
+  font-size: 15px;
+  margin-bottom: 10px;
+  color: #16325c;
+  border-bottom: 1px solid #d8dde6;
+  padding-bottom: 6px;
+}
+
+.section {
+  background: #fff;
+  border: 1px solid #d8dde6;
+  border-radius: 4px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.form-group {
+  margin-bottom: 12px;
+}
+
+.form-group label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 4px;
+  font-size: 13px;
+  color: #54698d;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d8dde6;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #16325c;
+  background: #fff;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #1589ee;
+  box-shadow: 0 0 0 1px #1589ee;
+}
+
+.form-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.form-row .field-name {
+  flex: 1;
+}
+
+.form-row .field-type {
+  width: 160px;
+}
+
+.form-row .field-value {
+  flex: 1.5;
+}
+
+.form-row .field-action {
+  width: 36px;
+  flex-shrink: 0;
+}
+
+.field-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 8px;
+  background: #f4f6f9;
+  border-radius: 4px;
+}
+
+.field-row input,
+.field-row select {
+  padding: 6px 8px;
+  border: 1px solid #d8dde6;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #16325c;
+}
+
+.field-row .fname {
+  flex: 1;
+}
+
+.field-row .ftype {
+  width: 150px;
+}
+
+.field-row .fvalue {
+  flex: 1.5;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-primary {
+  background: #0070d2;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #005fb2;
+}
+
+.btn-add {
+  background: #04844b;
+  color: #fff;
+  margin-top: 4px;
+}
+
+.btn-add:hover {
+  background: #03693c;
+}
+
+.btn-remove {
+  background: #c23934;
+  color: #fff;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.btn-remove:hover {
+  background: #a61a14;
+}
+
+#fields-container {
+  margin-bottom: 8px;
+}
+
+.header-row {
+  display: flex;
+  gap: 8px;
+  padding: 0 8px;
+  margin-bottom: 4px;
+}
+
+.header-row span {
+  font-weight: 600;
+  font-size: 12px;
+  color: #54698d;
+  text-transform: uppercase;
+}
+
+.header-row .fname {
+  flex: 1;
+}
+
+.header-row .ftype {
+  width: 150px;
+}
+
+.header-row .fvalue {
+  flex: 1.5;
+}
+
+.header-row .faction {
+  width: 32px;
+  flex-shrink: 0;
+}
+
+.headers-section {
+  margin-top: 12px;
+}
+
+.method-row {
+  display: flex;
+  gap: 12px;
+}
+
+.method-row .form-group:first-child {
+  width: 140px;
+  flex-shrink: 0;
+}
+
+.method-row .form-group:last-child {
+  flex: 1;
+}

@@ -1,0 +1,15 @@
+{
+  "name": "ca-post",
+  "version": "1.0.0",
+  "description": "Custom Activity para Marketing Cloud - POST em API externa",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "body-parser": "^1.20.2",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

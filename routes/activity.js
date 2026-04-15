@@ -6,23 +6,34 @@ var sfmcAuth = require('../helpers/sfmcAuth');
 // GET /activity/contact-attributes -- fetch Contact Builder attribute groups
 router.get('/contact-attributes', function (req, res) {
   if (!process.env.SFMC_CLIENT_ID) {
+    console.log('[CONTACT-ATTRS] No SFMC_CLIENT_ID configured');
     return res.json({ groups: [] });
   }
 
+  console.log('[CONTACT-ATTRS] Fetching token...');
+  console.log('[CONTACT-ATTRS] AUTH_URL:', process.env.SFMC_AUTH_URL);
+  console.log('[CONTACT-ATTRS] API_BASE:', process.env.SFMC_API_BASE);
+
   sfmcAuth.getAccessToken()
     .then(function (token) {
-      return axios.get(
-        process.env.SFMC_API_BASE + '/contacts/v1/attributeSetDefinitions',
-        { headers: { Authorization: 'Bearer ' + token } }
-      );
+      console.log('[CONTACT-ATTRS] Got token, fetching attribute sets...');
+      var url = process.env.SFMC_API_BASE.replace(/\/+$/, '') + '/contacts/v1/attributeSetDefinitions';
+      console.log('[CONTACT-ATTRS] URL:', url);
+      return axios.get(url, { headers: { Authorization: 'Bearer ' + token } });
     })
     .then(function (response) {
+      console.log('[CONTACT-ATTRS] Response keys:', Object.keys(response.data));
+      console.log('[CONTACT-ATTRS] Raw response (first 500 chars):', JSON.stringify(response.data).substring(0, 500));
+
       var sets = response.data.setDefinitions || response.data.items || [];
+      console.log('[CONTACT-ATTRS] Found ' + sets.length + ' attribute sets');
+
       var groups = [];
 
       sets.forEach(function (set) {
         var groupName = set.name;
-        var attrs = set.valueDefinitions || [];
+        var attrs = set.valueDefinitions || set.values || [];
+
         var fields = [];
 
         attrs.forEach(function (attr) {
@@ -40,10 +51,15 @@ router.get('/contact-attributes', function (req, res) {
         }
       });
 
+      console.log('[CONTACT-ATTRS] Returning ' + groups.length + ' groups');
       res.json({ groups: groups });
     })
     .catch(function (err) {
       console.error('[CONTACT-ATTRS] Error:', err.message);
+      if (err.response) {
+        console.error('[CONTACT-ATTRS] Status:', err.response.status);
+        console.error('[CONTACT-ATTRS] Data:', JSON.stringify(err.response.data).substring(0, 300));
+      }
       res.json({ groups: [] });
     });
 });

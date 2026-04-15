@@ -34,13 +34,15 @@ app.use(function (req, res, next) {
 });
 
 // Serve config.json dynamically with BASE_URL replacement (BEFORE static)
-app.get('/config.json', function (req, res) {
+// MC fetches config.json from the Endpoint URL root
+function serveConfig(req, res) {
   var configPath = path.join(__dirname, 'public', 'config.json');
   var raw = fs.readFileSync(configPath, 'utf8');
   var baseUrl = (process.env.BASE_URL || '').replace(/\/+$/, '');
   var config = raw.replace(/\{\{BASE_URL\}\}/g, baseUrl);
   res.type('application/json').send(config);
-});
+}
+app.get('/config.json', serveConfig);
 
 // Serve static files from /public
 app.use(express.static(path.join(__dirname, 'public')));

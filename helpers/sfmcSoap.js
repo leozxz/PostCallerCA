@@ -32,16 +32,18 @@ function soapRequest(soapUrl, token, body) {
 // Extract values between XML tags (simple parser, no dependency needed)
 function extractAll(xml, tag) {
   var results = [];
-  var openTag = '<' + tag + '>';
   var closeTag = '</' + tag + '>';
   var idx = 0;
   while (true) {
-    var start = xml.indexOf(openTag, idx);
-    if (start === -1) break;
-    start += openTag.length;
-    var end = xml.indexOf(closeTag, start);
+    // Match <Tag> or <Tag attr="...">
+    var openStart = xml.indexOf('<' + tag, idx);
+    if (openStart === -1) break;
+    var openEnd = xml.indexOf('>', openStart);
+    if (openEnd === -1) break;
+    var contentStart = openEnd + 1;
+    var end = xml.indexOf(closeTag, contentStart);
     if (end === -1) break;
-    results.push(xml.substring(start, end));
+    results.push(xml.substring(contentStart, end));
     idx = end + closeTag.length;
   }
   return results;

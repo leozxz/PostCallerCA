@@ -30,6 +30,16 @@ router.get('/contact-attributes', async function (req, res) {
       }
     });
 
+    // Debug: log first set's full valueDefinitions response
+    if (validSets.length > 0) {
+      var debugResp = await axios.get(
+        apiBase + '/contacts/v1/attributeSetDefinitions/' + validSets[0].id + '/valueDefinitions',
+        { headers: { Authorization: 'Bearer ' + token } }
+      );
+      console.log('[CONTACT-ATTRS] Debug set "' + validSets[0].name + '" response keys:', Object.keys(debugResp.data));
+      console.log('[CONTACT-ATTRS] Debug first 800 chars:', JSON.stringify(debugResp.data).substring(0, 800));
+    }
+
     // Fetch value definitions for each set
     var groups = [];
     var fetchResults = await Promise.all(validSets.map(function (set) {
@@ -38,7 +48,7 @@ router.get('/contact-attributes', async function (req, res) {
         { headers: { Authorization: 'Bearer ' + token } }
       )
         .then(function (resp) {
-          var attrs = resp.data.items || [];
+          var attrs = resp.data.items || resp.data.definitions || [];
           var fields = [];
           attrs.forEach(function (attr) {
             var attrName = (attr.name && attr.name.value) ? attr.name.value : (attr.name || '');
@@ -54,7 +64,10 @@ router.get('/contact-attributes', async function (req, res) {
           }
           return null;
         })
-        .catch(function () { return null; });
+        .catch(function (err) {
+          console.error('[CONTACT-ATTRS] Error fetching set ' + set.name + ':', err.message);
+          return null;
+        });
     }));
 
     fetchResults.forEach(function (g) {

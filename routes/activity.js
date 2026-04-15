@@ -1,6 +1,52 @@
 var express = require('express');
 var axios = require('axios');
 var router = express.Router();
+var sfmcAuth = require('../helpers/sfmcAuth');
+
+// GET /activity/contact-attributes -- fetch Contact Builder attribute groups
+router.get('/contact-attributes', function (req, res) {
+  if (!process.env.SFMC_CLIENT_ID) {
+    return res.json({ groups: [] });
+  }
+
+  sfmcAuth.getAccessToken()
+    .then(function (token) {
+      return axios.get(
+        process.env.SFMC_API_BASE + '/contacts/v1/attributeSetDefinitions',
+        { headers: { Authorization: 'Bearer ' + token } }
+      );
+    })
+    .then(function (response) {
+      var sets = response.data.setDefinitions || response.data.items || [];
+      var groups = [];
+
+      sets.forEach(function (set) {
+        var groupName = set.name;
+        var attrs = set.valueDefinitions || [];
+        var fields = [];
+
+        attrs.forEach(function (attr) {
+          if (attr.name && !attr.isHidden) {
+            fields.push({
+              key: '{{Contact.Attribute.' + groupName + '.' + attr.name + '}}',
+              label: attr.name,
+              type: attr.dataType || 'Text'
+            });
+          }
+        });
+
+        if (fields.length > 0) {
+          groups.push({ name: groupName, fields: fields });
+        }
+      });
+
+      res.json({ groups: groups });
+    })
+    .catch(function (err) {
+      console.error('[CONTACT-ATTRS] Error:', err.message);
+      res.json({ groups: [] });
+    });
+});
 
 // POST /activity/save -- echo body (200 required by JB)
 router.post('/save', function (req, res) {

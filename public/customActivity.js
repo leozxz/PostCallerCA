@@ -3,6 +3,7 @@
 var connection = new Postmonger.Session();
 var activityPayload = {};
 var schemaFields = [];
+var contactGroups = [];
 
 // Fire ready immediately at top level
 connection.trigger('ready');
@@ -20,6 +21,7 @@ connection.on('initActivity', function(payload) {
   }
 
   connection.trigger('requestSchema');
+  loadContactAttributes();
 });
 
 connection.on('requestedSchema', function(data) {
@@ -40,6 +42,21 @@ connection.on('clickedBack', function() {
 connection.on('gotoStep', function(step) {
   console.log('[CA] gotoStep', JSON.stringify(step));
 });
+
+// ---- Load contact attributes from server ----
+
+function loadContactAttributes() {
+  fetch('/activity/contact-attributes')
+    .then(function(resp) { return resp.json(); })
+    .then(function(data) {
+      contactGroups = data.groups || [];
+      console.log('[CA] contact groups', JSON.stringify(contactGroups));
+      updateAllContactDropdowns();
+    })
+    .catch(function(err) {
+      console.error('[CA] Error loading contact attributes:', err);
+    });
+}
 
 // ---- Parse schema ----
 
@@ -118,13 +135,8 @@ function saveActivity() {
       var sel = row.querySelector('.fvalue-select');
       inArgs[name] = sel ? sel.value : '';
     } else if (type === 'contact') {
-      var input = row.querySelector('.fvalue-contact');
-      var val = input ? input.value.trim() : '';
-      // Wrap in {{ }} if user didn't
-      if (val && val.indexOf('{{') === -1) {
-        val = '{{Contact.Attribute.' + val + '}}';
-      }
-      inArgs[name] = val;
+      var sel = row.querySelector('.fvalue-contact-select');
+      inArgs[name] = sel ? sel.value : '';
     } else {
       var input = row.querySelector('.fvalue');
       inArgs[name] = input ? input.value.trim() : '';
@@ -156,20 +168,26 @@ function buildJourneySelect(selectedValue) {
   return html;
 }
 
-function buildContactInput(value) {
-  // Strip {{ }} wrapper for display
-  var displayVal = value || '';
-  if (displayVal.indexOf('{{Contact.Attribute.') === 0) {
-    displayVal = displayVal.replace('{{Contact.Attribute.', '').replace('}}', '');
-  } else if (displayVal.indexOf('{{Contact.') === 0) {
-    displayVal = displayVal.replace('{{', '').replace('}}', '');
+function buildContactSelect(selectedValue) {
+  var html = '<select class="fvalue-contact-select">';
+  html += '<option value="">-- Selecione um campo --</option>';
+  for (var g = 0; g < contactGroups.length; g++) {
+    var group = contactGroups[g];
+    html += '<optgroup label="' + escapeAttr(group.name) + '">';
+    for (var f = 0; f < group.fields.length; f++) {
+      var field = group.fields[f];
+      var sel = (selectedValue && selectedValue === field.key) ? ' selected' : '';
+      html += '<option value="' + escapeAttr(field.key) + '"' + sel + '>' + escapeAttr(field.label) + '</option>';
+    }
+    html += '</optgroup>';
   }
-  return '<input type="text" class="fvalue-contact" placeholder="NomeDaDE.Campo" value="' + escapeAttr(displayVal) + '">';
+  html += '</select>';
+  return html;
 }
 
 function buildValueElement(type, value) {
   if (type === 'journey') return buildJourneySelect(value);
-  if (type === 'contact') return buildContactInput(value);
+  if (type === 'contact') return buildContactSelect(value);
   return '<input type="text" class="fvalue" placeholder="valor fixo" value="' + escapeAttr(value || '') + '">';
 }
 
@@ -208,7 +226,7 @@ function onTypeChange(select) {
   var row = select.closest('.field-row');
   var oldInput = row.querySelector('.fvalue');
   var oldSelect = row.querySelector('.fvalue-select');
-  var oldContact = row.querySelector('.fvalue-contact');
+  var oldContact = row.querySelector('.fvalue-contact-select');
   if (oldInput) oldInput.remove();
   if (oldSelect) oldSelect.remove();
   if (oldContact) oldContact.remove();
@@ -225,6 +243,16 @@ function updateAllJourneyDropdowns() {
     var currentVal = sel.value;
     var wrapper = document.createElement('span');
     wrapper.innerHTML = buildJourneySelect(currentVal);
+    sel.parentNode.replaceChild(wrapper.firstChild, sel);
+  });
+}
+
+function updateAllContactDropdowns() {
+  var selects = document.querySelectorAll('.fvalue-contact-select');
+  selects.forEach(function(sel) {
+    var currentVal = sel.value;
+    var wrapper = document.createElement('span');
+    wrapper.innerHTML = buildContactSelect(currentVal);
     sel.parentNode.replaceChild(wrapper.firstChild, sel);
   });
 }

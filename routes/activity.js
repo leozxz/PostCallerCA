@@ -33,34 +33,33 @@ router.get('/contact-attributes', async function (req, res) {
 
     console.log('[CONTACT-ATTRS] Valid sets: ' + validSets.length);
 
-    // Debug: log first set's full response
-    if (validSets.length > 0) {
-      try {
-        var debugResp = await axios.get(
-          apiBase + '/contacts/v1/attributeSetDefinitions/key:' + validSets[0].key,
-          { headers: { Authorization: 'Bearer ' + token } }
-        );
-        console.log('[CONTACT-ATTRS] Debug set "' + validSets[0].name + '" keys:', Object.keys(debugResp.data));
-        console.log('[CONTACT-ATTRS] Debug first 1000 chars:', JSON.stringify(debugResp.data).substring(0, 1000));
-      } catch (e) {
-        console.error('[CONTACT-ATTRS] Debug fetch failed:', e.message);
-      }
-    }
+    // The initial response already contains all we need - each set has
+    // valueDefinitions nested. But the list endpoint doesn't include them.
+    // We need to fetch each set individually to get valueDefinitions.
+    // The response wraps in "item" (singular).
 
-    // Fetch value definitions for each set
+    // Fetch value definitions for each set (limit to first 30 to avoid timeout)
     var groups = [];
-    var fetchResults = await Promise.all(validSets.map(function (set) {
+    var setsToFetch = validSets.slice(0, 30);
+    var fetchResults = await Promise.all(setsToFetch.map(function (set) {
       return axios.get(
-        apiBase + '/contacts/v1/attributeSetDefinitions/key:' + set.key,
+        apiBase + '/contacts/v1/attributeSetDefinitions/key:' + set.key + '?$expand=valueDefinitions',
         { headers: { Authorization: 'Bearer ' + token } }
       )
         .then(function (resp) {
-          var setData = resp.data;
-          var attrs = setData.valueDefinitions || setData.items || [];
+          var setData = resp.data.item || resp.data;
+          var attrs = setData.valueDefinitions || [];
+
+          // Log first successful result for debugging
+          if (attrs.length > 0 && groups.length === 0) {
+            console.log('[CONTACT-ATTRS] Sample attr:', JSON.stringify(attrs[0]).substring(0, 300));
+          }
+
           var fields = [];
           attrs.forEach(function (attr) {
             var attrName = (attr.name && attr.name.value) ? attr.name.value : (attr.name || '');
-            if (attrName && !attr.isHidden) {
+            var isHidden = attr.isHidden || (attr.access && attr.access === 'Hidden');
+            if (attrName && !isHidden) {
               fields.push({
                 key: '{{Contact.Attribute.' + set.name + '.' + attrName + '}}',
                 label: attrName

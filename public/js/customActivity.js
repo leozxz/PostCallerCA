@@ -3,6 +3,7 @@
 var connection = new Postmonger.Session();
 var activityPayload = {};
 var schemaFields = [];
+var steps = [{ label: 'Configurar API', key: 'step1' }];
 
 // ---- Journey Builder lifecycle events ----
 
@@ -17,27 +18,29 @@ connection.on('initActivity', function(payload) {
   if (args && args.length > 0) {
     restoreConfig(args[0]);
   }
+
+  connection.trigger('updateSteps', steps);
+  connection.trigger('gotoStep', steps[0]);
 });
 
 connection.on('requestedSchema', function(data) {
   console.log('[CA] schema', JSON.stringify(data));
   schemaFields = parseSchema(data);
-  console.log('[CA] parsed fields', JSON.stringify(schemaFields));
-  // Update any existing journey dropdowns with the schema fields
   updateAllJourneyDropdowns();
 });
 
 connection.on('clickedNext', function() {
-  saveConfig();
-  connection.trigger('nextStep');
+  console.log('[CA] clickedNext');
+  save();
 });
 
 connection.on('clickedBack', function() {
   connection.trigger('prevStep');
 });
 
-connection.on('gotoStep', function() {
-  // single step wizard
+connection.on('gotoStep', function(step) {
+  console.log('[CA] gotoStep', JSON.stringify(step));
+  connection.trigger('ready');
 });
 
 // ---- Parse schema into field list ----
@@ -50,17 +53,12 @@ function parseSchema(data) {
   for (var i = 0; i < schemaItems.length; i++) {
     var item = schemaItems[i];
     var key = item.key;
-    var name = item.name || key;
-
-    // Extract readable field name from the key
-    // Keys look like: "Event.DEAudience-XXXXX.FieldName"
     var parts = key.split('.');
     var fieldName = parts[parts.length - 1];
 
     fields.push({
       key: '{{' + key + '}}',
-      label: fieldName,
-      fullName: name
+      label: fieldName
     });
   }
   return fields;
@@ -76,7 +74,6 @@ function restoreConfig(args) {
     document.getElementById('httpMethod').value = args._httpMethod;
   }
 
-  // Restore headers
   for (var key in args) {
     if (key.startsWith('_header_')) {
       var headerName = key.replace('_header_', '');
@@ -84,7 +81,6 @@ function restoreConfig(args) {
     }
   }
 
-  // Restore body fields
   for (var key in args) {
     if (!key.startsWith('_')) {
       var value = args[key];
@@ -96,7 +92,7 @@ function restoreConfig(args) {
 
 // ---- Save config from UI into payload ----
 
-function saveConfig() {
+function save() {
   var targetUrl = document.getElementById('targetUrl').value.trim();
   var httpMethod = document.getElementById('httpMethod').value;
 
@@ -124,8 +120,8 @@ function saveConfig() {
     if (!name) return;
 
     if (type === 'journey') {
-      var select = row.querySelector('.fvalue-select');
-      inArgs[name] = select ? select.value : '';
+      var sel = row.querySelector('.fvalue-select');
+      inArgs[name] = sel ? sel.value : '';
     } else {
       var input = row.querySelector('.fvalue');
       inArgs[name] = input ? input.value.trim() : '';
@@ -136,10 +132,11 @@ function saveConfig() {
   activityPayload.arguments.execute = activityPayload.arguments.execute || {};
   activityPayload.arguments.execute.inArguments = [inArgs];
 
+  // Mark as configured if URL is provided
   activityPayload.metaData = activityPayload.metaData || {};
-  activityPayload.metaData.isConfigured = !!(targetUrl);
+  activityPayload.metaData.isConfigured = true;
 
-  console.log('[CA] saveConfig', JSON.stringify(activityPayload));
+  console.log('[CA] save payload', JSON.stringify(activityPayload));
   connection.trigger('updateActivity', activityPayload);
 }
 
@@ -200,13 +197,11 @@ function removeRow(btn) {
 
 function onTypeChange(select) {
   var row = select.closest('.field-row');
-  // Remove existing value element (input or select)
   var oldInput = row.querySelector('.fvalue');
   var oldSelect = row.querySelector('.fvalue-select');
   if (oldInput) oldInput.remove();
   if (oldSelect) oldSelect.remove();
 
-  // Insert new element before the remove button
   var removeBtn = row.querySelector('.btn-remove');
   if (select.value === 'journey') {
     var wrapper = document.createElement('span');
@@ -242,10 +237,5 @@ function escapeAttr(str) {
 
 // ---- Initialize ----
 
-connection.on('requestedInteraction', function(settings) {
-  console.log('[CA] requestedInteraction', JSON.stringify(settings));
-});
-
-// Tell Journey Builder we're ready
 connection.trigger('ready');
 connection.trigger('requestSchema');

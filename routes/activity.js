@@ -4,64 +4,69 @@ var router = express.Router();
 var sfmcAuth = require('../helpers/sfmcAuth');
 
 // GET /activity/contact-attributes -- fetch Contact Builder attribute groups
-router.get('/contact-attributes', function (req, res) {
+router.get('/contact-attributes', async function (req, res) {
   if (!process.env.SFMC_CLIENT_ID) {
-    console.log('[CONTACT-ATTRS] No SFMC_CLIENT_ID configured');
     return res.json({ groups: [] });
   }
 
-  console.log('[CONTACT-ATTRS] Fetching token...');
-  console.log('[CONTACT-ATTRS] AUTH_URL:', process.env.SFMC_AUTH_URL);
-  console.log('[CONTACT-ATTRS] API_BASE:', process.env.SFMC_API_BASE);
+  try {
+    var apiBase = process.env.SFMC_API_BASE.replace(/\/+$/, '');
+    var token = await sfmcAuth.getAccessToken();
 
-  sfmcAuth.getAccessToken()
-    .then(function (token) {
-      console.log('[CONTACT-ATTRS] Got token, fetching attribute sets...');
-      var url = process.env.SFMC_API_BASE.replace(/\/+$/, '') + '/contacts/v1/attributeSetDefinitions';
-      console.log('[CONTACT-ATTRS] URL:', url);
-      return axios.get(url, { headers: { Authorization: 'Bearer ' + token } });
-    })
-    .then(function (response) {
-      console.log('[CONTACT-ATTRS] Response keys:', Object.keys(response.data));
-      console.log('[CONTACT-ATTRS] Raw response (first 500 chars):', JSON.stringify(response.data).substring(0, 500));
+    // Fetch attribute set definitions
+    var setsResp = await axios.get(
+      apiBase + '/contacts/v1/attributeSetDefinitions?$pageSize=200',
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
 
-      var sets = response.data.setDefinitions || response.data.items || [];
-      console.log('[CONTACT-ATTRS] Found ' + sets.length + ' attribute sets');
+    var sets = setsResp.data.items || [];
+    console.log('[CONTACT-ATTRS] Found ' + sets.length + ' attribute sets');
 
-      var groups = [];
-
-      sets.forEach(function (set) {
-        var groupName = set.name;
-        var attrs = set.valueDefinitions || set.values || [];
-
-        var fields = [];
-
-        attrs.forEach(function (attr) {
-          if (attr.name && !attr.isHidden) {
-            fields.push({
-              key: '{{Contact.Attribute.' + groupName + '.' + attr.name + '}}',
-              label: attr.name,
-              type: attr.dataType || 'Text'
-            });
-          }
-        });
-
-        if (fields.length > 0) {
-          groups.push({ name: groupName, fields: fields });
-        }
-      });
-
-      console.log('[CONTACT-ATTRS] Returning ' + groups.length + ' groups');
-      res.json({ groups: groups });
-    })
-    .catch(function (err) {
-      console.error('[CONTACT-ATTRS] Error:', err.message);
-      if (err.response) {
-        console.error('[CONTACT-ATTRS] Status:', err.response.status);
-        console.error('[CONTACT-ATTRS] Data:', JSON.stringify(err.response.data).substring(0, 300));
+    var validSets = [];
+    sets.forEach(function (set) {
+      var setName = (set.name && set.name.value) ? set.name.value : (set.name || '');
+      if (setName && !set.isHidden) {
+        validSets.push({ id: set.id, name: setName });
       }
-      res.json({ groups: [] });
     });
+
+    // Fetch value definitions for each set
+    var groups = [];
+    var fetchResults = await Promise.all(validSets.map(function (set) {
+      return axios.get(
+        apiBase + '/contacts/v1/attributeSetDefinitions/' + set.id + '/valueDefinitions',
+        { headers: { Authorization: 'Bearer ' + token } }
+      )
+        .then(function (resp) {
+          var attrs = resp.data.items || [];
+          var fields = [];
+          attrs.forEach(function (attr) {
+            var attrName = (attr.name && attr.name.value) ? attr.name.value : (attr.name || '');
+            if (attrName && !attr.isHidden) {
+              fields.push({
+                key: '{{Contact.Attribute.' + set.name + '.' + attrName + '}}',
+                label: attrName
+              });
+            }
+          });
+          if (fields.length > 0) {
+            return { name: set.name, fields: fields };
+          }
+          return null;
+        })
+        .catch(function () { return null; });
+    }));
+
+    fetchResults.forEach(function (g) {
+      if (g) groups.push(g);
+    });
+
+    console.log('[CONTACT-ATTRS] Returning ' + groups.length + ' groups');
+    res.json({ groups: groups });
+  } catch (err) {
+    console.error('[CONTACT-ATTRS] Error:', err.message);
+    res.json({ groups: [] });
+  }
 });
 
 // POST /activity/save -- echo body (200 required by JB)

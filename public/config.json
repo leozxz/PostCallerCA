@@ -56,8 +56,10 @@
     { "label": "Configurar API", "key": "step1" }
   ],
   "userInterfaces": {
-    "configInspector": {
-      "size": "scm-lg",
+    "configModal": {
+      "height": 600,
+      "width": 800,
+      "fullscreen": false,
       "emptyIframe": false,
       "url": "{{BASE_URL}}/index.html"
     }

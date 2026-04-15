@@ -2,6 +2,7 @@ var express = require('express');
 var axios = require('axios');
 var router = express.Router();
 var sfmcAuth = require('../helpers/sfmcAuth');
+var sfmcSoap = require('../helpers/sfmcSoap');
 
 // GET /activity/contact-attributes -- fetch Contact Builder attribute groups
 router.get('/contact-attributes', async function (req, res) {
@@ -71,41 +72,31 @@ router.get('/contact-attributes', async function (req, res) {
   }
 });
 
-// GET /activity/de-list -- list available Data Extensions
+// GET /activity/de-list -- list available Data Extensions via SOAP
 router.get('/de-list', async function (req, res) {
   if (!process.env.SFMC_CLIENT_ID) {
     return res.json({ items: [] });
   }
 
   try {
-    var apiBase = process.env.SFMC_API_BASE.replace(/\/+$/, '');
     var token = await sfmcAuth.getAccessToken();
+    var soapUrl = sfmcAuth.getSoapUrl();
 
-    var resp = await axios.get(
-      apiBase + '/data/v1/customobjectdata',
-      { headers: { Authorization: 'Bearer ' + token } }
-    );
-    console.log('[DE-LIST] response keys:', Object.keys(resp.data));
-
-    var items = resp.data.items || [];
-    var deList = [];
-    for (var i = 0; i < items.length; i++) {
-      var de = items[i];
-      deList.push({
-        key: de.key || de.customerKey || de.externalKey || '',
-        name: de.name || ''
-      });
+    if (!soapUrl) {
+      console.error('[DE-LIST] No SOAP URL available');
+      return res.json({ items: [], error: 'No SOAP URL' });
     }
 
-    console.log('[DE-LIST] Found ' + deList.length + ' DEs');
-    res.json({ items: deList });
+    var des = await sfmcSoap.listDataExtensions(soapUrl, token);
+    console.log('[DE-LIST] Found ' + des.length + ' DEs');
+    res.json({ items: des });
   } catch (err) {
-    console.error('[DE-LIST] Error:', err.response ? err.response.status + ' ' + JSON.stringify(err.response.data).substring(0, 300) : err.message);
+    console.error('[DE-LIST] Error:', err.message);
     res.json({ items: [], error: err.message });
   }
 });
 
-// GET /activity/de-fields -- fetch fields of a Data Extension by key or name
+// GET /activity/de-fields -- fetch fields of a DE via SOAP
 router.get('/de-fields', async function (req, res) {
   var deKey = req.query.key;
   if (!deKey || !process.env.SFMC_CLIENT_ID) {
@@ -113,51 +104,15 @@ router.get('/de-fields', async function (req, res) {
   }
 
   try {
-    var apiBase = process.env.SFMC_API_BASE.replace(/\/+$/, '');
     var token = await sfmcAuth.getAccessToken();
-    var fields = [];
+    var soapUrl = sfmcAuth.getSoapUrl();
 
-    // Try multiple endpoints to get DE fields
-    var endpoints = [
-      { name: 'dataevents', url: apiBase + '/hub/v1/dataevents/key:' + encodeURIComponent(deKey) },
-      { name: 'customobjectdata', url: apiBase + '/data/v1/customobjectdata/key/' + encodeURIComponent(deKey) }
-    ];
-
-    for (var i = 0; i < endpoints.length; i++) {
-      if (fields.length > 0) break;
-      try {
-        var resp = await axios.get(endpoints[i].url, { headers: { Authorization: 'Bearer ' + token } });
-        console.log('[DE-FIELDS] ' + endpoints[i].name + ' response:', JSON.stringify(resp.data).substring(0, 800));
-
-        // Try to extract fields from various response formats
-        var dataFields = resp.data.dataFields || resp.data.fields || resp.data.columns || [];
-        for (var j = 0; j < dataFields.length; j++) {
-          var fname = dataFields[j].name || dataFields[j].Name || '';
-          if (fname) fields.push(fname);
-        }
-      } catch (e) {
-        console.log('[DE-FIELDS] ' + endpoints[i].name + ' failed:', e.response ? e.response.status + ' ' + JSON.stringify(e.response.data).substring(0, 200) : e.message);
-      }
+    if (!soapUrl) {
+      return res.json({ fields: [], error: 'No SOAP URL' });
     }
 
-    // Fallback: read a row and extract field names
-    if (fields.length === 0) {
-      try {
-        var rowResp = await axios.get(
-          apiBase + '/data/v1/customobjectdata/key/' + encodeURIComponent(deKey) + '/rowset?$page=1&$pageSize=1',
-          { headers: { Authorization: 'Bearer ' + token } }
-        );
-        console.log('[DE-FIELDS] rowset response:', JSON.stringify(rowResp.data).substring(0, 500));
-        var items = rowResp.data.items || [];
-        if (items.length > 0) {
-          var row = items[0];
-          if (row.keys) Object.keys(row.keys).forEach(function (f) { fields.push(f); });
-          if (row.values) Object.keys(row.values).forEach(function (f) { fields.push(f); });
-        }
-      } catch (e2) {
-        console.log('[DE-FIELDS] rowset failed:', e2.response ? e2.response.status : e2.message);
-      }
-    }
+    var deFields = await sfmcSoap.getDataExtensionFields(soapUrl, token, deKey);
+    var fields = deFields.map(function (f) { return f.name; });
 
     console.log('[DE-FIELDS] DE=' + deKey + ' fields=' + fields.join(', '));
     res.json({ fields: fields });
@@ -191,10 +146,10 @@ router.post('/stop', function (req, res) {
   res.status(200).json(req.body);
 });
 
-// Helper: resolve DE lookups in payload
+// Helper: resolve DE lookups in payload via SOAP
 async function resolveLookups(payload, token) {
-  var apiBase = (process.env.SFMC_API_BASE || '').replace(/\/+$/, '');
-  if (!apiBase || !token) return payload;
+  var soapUrl = sfmcAuth.getSoapUrl();
+  if (!soapUrl || !token) return payload;
 
   var resolved = {};
   var lookupPromises = [];
@@ -204,32 +159,16 @@ async function resolveLookups(payload, token) {
     // Lookup format: _lookup_:DEName:keyField:keyValue:returnField
     if (typeof val === 'string' && val.indexOf('_lookup_:') === 0) {
       var parts = val.split(':');
-      // parts[0]=_lookup_, parts[1]=DE, parts[2]=keyField, parts[last]=returnField
-      // keyValue is everything between keyField and returnField (may contain colons)
       if (parts.length >= 5) {
         (function (fieldName, deName, keyField, keyValue, returnField) {
-          var url = apiBase + '/data/v1/customobjectdata/key/' + encodeURIComponent(deName)
-            + '/rows/' + encodeURIComponent(keyField) + '/' + encodeURIComponent(keyValue);
-          console.log('[LOOKUP] GET ' + url);
           lookupPromises.push(
-            axios.get(url, { headers: { Authorization: 'Bearer ' + token } })
-              .then(function (resp) {
-                // Response can be a single row object or an array
-                var row = Array.isArray(resp.data.items) ? resp.data.items[0] : resp.data;
-                var val = '';
-                if (row) {
-                  // Check both keys and values objects for the return field
-                  if (row.values && row.values[returnField] !== undefined) {
-                    val = row.values[returnField];
-                  } else if (row.keys && row.keys[returnField] !== undefined) {
-                    val = row.keys[returnField];
-                  }
-                }
-                resolved[fieldName] = val;
-                console.log('[LOOKUP] ' + deName + '.' + returnField + ' = ' + val);
+            sfmcSoap.queryDataExtension(soapUrl, token, deName, [returnField], keyField, keyValue)
+              .then(function (row) {
+                resolved[fieldName] = (row && row[returnField]) || '';
+                console.log('[LOOKUP] ' + deName + '.' + returnField + ' = ' + resolved[fieldName]);
               })
               .catch(function (err) {
-                console.error('[LOOKUP] Error for ' + deName + ':', err.response ? JSON.stringify(err.response.data) : err.message);
+                console.error('[LOOKUP] Error for ' + deName + ':', err.message);
                 resolved[fieldName] = '';
               })
           );
@@ -277,12 +216,11 @@ router.post('/execute', async function (req, res) {
     }
 
     // Resolve any DE lookups
-    var token = null;
     var hasLookups = Object.values(payload).some(function (v) {
       return typeof v === 'string' && v.indexOf('_lookup_:') === 0;
     });
     if (hasLookups && process.env.SFMC_CLIENT_ID) {
-      token = await sfmcAuth.getAccessToken();
+      var token = await sfmcAuth.getAccessToken();
       payload = await resolveLookups(payload, token);
     }
 

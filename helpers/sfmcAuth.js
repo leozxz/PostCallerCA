@@ -19,7 +19,8 @@ function getAccessToken() {
     .then(function (response) {
       tokenCache = {
         token: response.data.access_token,
-        expiresAt: now + response.data.expires_in * 1000
+        expiresAt: now + response.data.expires_in * 1000,
+        soapUrl: (response.data.soap_instance_url || '').replace(/\/+$/, '')
       };
       return tokenCache.token;
     })
@@ -29,4 +30,8 @@ function getAccessToken() {
     });
 }
 
-module.exports = { getAccessToken: getAccessToken };
+function getSoapUrl() {
+  return tokenCache.soapUrl || '';
+}
+
+module.exports = { getAccessToken: getAccessToken, getSoapUrl: getSoapUrl };

@@ -171,14 +171,23 @@ function saveActivity() {
       var sel = row.querySelector('.fvalue-contact-select');
       inArgs[name] = sel ? sel.value : '';
     } else if (type === 'lookup') {
-      var deName = row.querySelector('.lookup-de').value.trim();
+      var deSel = row.querySelector('.lookup-de');
+      var deKey = deSel ? deSel.value : '';
+      // Find the DE name from the availableDEs list (SOAP needs the name, not the key)
+      var deNameForSoap = deKey;
+      for (var d = 0; d < availableDEs.length; d++) {
+        if (availableDEs[d].key === deKey) {
+          deNameForSoap = availableDEs[d].name;
+          break;
+        }
+      }
       var keyFieldSel = row.querySelector('.lookup-key-field');
       var keyField = keyFieldSel ? keyFieldSel.value : '';
       var keyValueSel = row.querySelector('.lookup-key-value');
       var keyValue = keyValueSel ? keyValueSel.value : '';
       var returnFieldSel = row.querySelector('.lookup-return');
       var returnField = returnFieldSel ? returnFieldSel.value : '';
-      inArgs[name] = '_lookup_:' + deName + ':' + keyField + ':' + keyValue + ':' + returnField;
+      inArgs[name] = '_lookup_:' + deNameForSoap + ':' + keyField + ':' + keyValue + ':' + returnField;
     } else {
       var input = row.querySelector('.fvalue');
       inArgs[name] = input ? input.value.trim() : '';

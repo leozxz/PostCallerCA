@@ -5,7 +5,7 @@
     "icon": "",
     "category": "message"
   },
-  "type": "Rest",
+  "type": "REST",
   "lang": {
     "en-US": {
       "name": "API POST",
@@ -56,10 +56,8 @@
     { "label": "Configurar API", "key": "step1" }
   ],
   "userInterfaces": {
-    "configModal": {
-      "height": 600,
-      "width": 800,
-      "fullscreen": false,
+    "configInspector": {
+      "size": "scm-lg",
       "emptyIframe": false,
       "url": "{{BASE_URL}}/index.html"
     }

@@ -1,21 +1,35 @@
 const express = require('express');
 const cors = require('cors');
-const bodyParser = require('body-parser');
 const activityRouter = require('./routes/activity');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(bodyParser.raw({ type: 'application/jwt' }));
-app.use(bodyParser.text({ type: 'text/*' }));
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
 
-// Serve config.json dynamically so key and base URL come from env vars
+// Log ALL incoming requests
+app.use((req, res, next) => {
+  console.log('[REQUEST]', req.method, req.url, 'Content-Type:', req.headers['content-type']);
+  next();
+});
+
+// Parse body - try JSON first, fallback to raw text for JWT
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true }));
+// Catch JSON parse errors (MC may send JWT as body with application/json content-type)
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.parse.failed') {
+    console.log('[BODY-PARSE] JSON parse failed, reading raw body');
+    req.body = err.body || '';
+    next();
+  } else {
+    next(err);
+  }
+});
+
+// Serve config.json dynamically
 app.get('/config.json', (req, res) => {
   var baseUrl = process.env.BASE_URL || 'https://postcallerca-production.up.railway.app/';
-  // Ensure trailing slash
   if (!baseUrl.endsWith('/')) baseUrl += '/';
 
   res.json({
@@ -73,6 +87,15 @@ app.use('/activity', activityRouter);
 // Health check
 app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
 
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('[ERROR]', req.method, req.url, err.message);
+  res.status(200).json({ success: true });
+});
+
 app.listen(PORT, () => {
-  console.log(`CA Post running on port ${PORT}`);
+  console.log('CA Post running on port ' + PORT);
+  console.log('BASE_URL:', process.env.BASE_URL || '(not set)');
+  console.log('ACTIVITY_KEY:', process.env.ACTIVITY_KEY || '(not set)');
+  console.log('JWT_SECRET:', process.env.JWT_SECRET ? '(set)' : '(not set)');
 });

@@ -3,9 +3,9 @@
 var connection = new Postmonger.Session();
 var activityPayload = {};
 var schemaFields = [];
-var steps = [{ label: 'Configurar API', key: 'step1' }];
 
-// ---- Journey Builder lifecycle events ----
+// Fire ready immediately at top level
+connection.trigger('ready');
 
 connection.on('initActivity', function(payload) {
   activityPayload = payload || {};
@@ -19,8 +19,7 @@ connection.on('initActivity', function(payload) {
     restoreConfig(args[0]);
   }
 
-  connection.trigger('updateSteps', steps);
-  connection.trigger('gotoStep', steps[0]);
+  connection.trigger('requestSchema');
 });
 
 connection.on('requestedSchema', function(data) {
@@ -30,8 +29,8 @@ connection.on('requestedSchema', function(data) {
 });
 
 connection.on('clickedNext', function() {
-  console.log('[CA] clickedNext');
-  save();
+  saveActivity();
+  connection.trigger('nextStep');
 });
 
 connection.on('clickedBack', function() {
@@ -40,31 +39,26 @@ connection.on('clickedBack', function() {
 
 connection.on('gotoStep', function(step) {
   console.log('[CA] gotoStep', JSON.stringify(step));
-  connection.trigger('ready');
 });
 
-// ---- Parse schema into field list ----
+// ---- Parse schema ----
 
 function parseSchema(data) {
   var fields = [];
   if (!data || !data.schema) return fields;
-
-  var schemaItems = data.schema;
-  for (var i = 0; i < schemaItems.length; i++) {
-    var item = schemaItems[i];
-    var key = item.key;
+  var items = data.schema;
+  for (var i = 0; i < items.length; i++) {
+    var key = items[i].key;
     var parts = key.split('.');
-    var fieldName = parts[parts.length - 1];
-
     fields.push({
       key: '{{' + key + '}}',
-      label: fieldName
+      label: parts[parts.length - 1]
     });
   }
   return fields;
 }
 
-// ---- Restore saved config into UI ----
+// ---- Restore saved config ----
 
 function restoreConfig(args) {
   if (args._targetUrl) {
@@ -76,8 +70,7 @@ function restoreConfig(args) {
 
   for (var key in args) {
     if (key.startsWith('_header_')) {
-      var headerName = key.replace('_header_', '');
-      addHeader(headerName, args[key]);
+      addHeader(key.replace('_header_', ''), args[key]);
     }
   }
 
@@ -90,9 +83,9 @@ function restoreConfig(args) {
   }
 }
 
-// ---- Save config from UI into payload ----
+// ---- Save activity ----
 
-function save() {
+function saveActivity() {
   var targetUrl = document.getElementById('targetUrl').value.trim();
   var httpMethod = document.getElementById('httpMethod').value;
 
@@ -101,24 +94,18 @@ function save() {
     _httpMethod: httpMethod
   };
 
-  // Collect headers
   var headerRows = document.querySelectorAll('#headers-container .field-row');
   headerRows.forEach(function(row) {
     var hName = row.querySelector('.hname').value.trim();
     var hValue = row.querySelector('.hvalue').value.trim();
-    if (hName) {
-      inArgs['_header_' + hName] = hValue;
-    }
+    if (hName) inArgs['_header_' + hName] = hValue;
   });
 
-  // Collect body fields
   var fieldRows = document.querySelectorAll('#fields-container .field-row');
   fieldRows.forEach(function(row) {
     var name = row.querySelector('.fname').value.trim();
     var type = row.querySelector('.ftype').value;
-
     if (!name) return;
-
     if (type === 'journey') {
       var sel = row.querySelector('.fvalue-select');
       inArgs[name] = sel ? sel.value : '';
@@ -132,15 +119,14 @@ function save() {
   activityPayload.arguments.execute = activityPayload.arguments.execute || {};
   activityPayload.arguments.execute.inArguments = [inArgs];
 
-  // Mark as configured if URL is provided
   activityPayload.metaData = activityPayload.metaData || {};
   activityPayload.metaData.isConfigured = true;
 
-  console.log('[CA] save payload', JSON.stringify(activityPayload));
+  console.log('[CA] saveActivity', JSON.stringify(activityPayload));
   connection.trigger('updateActivity', activityPayload);
 }
 
-// ---- Dynamic field management ----
+// ---- UI helpers ----
 
 function buildJourneySelect(selectedValue) {
   var html = '<select class="fvalue-select">';
@@ -159,12 +145,9 @@ function addField(name, type, value) {
   var row = document.createElement('div');
   row.className = 'field-row';
 
-  var valueHtml;
-  if (type === 'journey') {
-    valueHtml = buildJourneySelect(value);
-  } else {
-    valueHtml = '<input type="text" class="fvalue" placeholder="valor fixo" value="' + escapeAttr(value || '') + '">';
-  }
+  var valueHtml = (type === 'journey')
+    ? buildJourneySelect(value)
+    : '<input type="text" class="fvalue" placeholder="valor fixo" value="' + escapeAttr(value || '') + '">';
 
   row.innerHTML =
     '<input type="text" class="fname" placeholder="nome_campo" value="' + escapeAttr(name || '') + '">' +
@@ -182,18 +165,14 @@ function addHeader(name, value) {
   var container = document.getElementById('headers-container');
   var row = document.createElement('div');
   row.className = 'field-row';
-
   row.innerHTML =
     '<input type="text" class="hname" placeholder="Authorization" value="' + escapeAttr(name || '') + '" style="flex:1">' +
     '<input type="text" class="hvalue" placeholder="Bearer token..." value="' + escapeAttr(value || '') + '" style="flex:2">' +
     '<button class="btn btn-remove" onclick="removeRow(this)" title="Remover">&times;</button>';
-
   container.appendChild(row);
 }
 
-function removeRow(btn) {
-  btn.parentElement.remove();
-}
+function removeRow(btn) { btn.parentElement.remove(); }
 
 function onTypeChange(select) {
   var row = select.closest('.field-row');
@@ -228,14 +207,6 @@ function updateAllJourneyDropdowns() {
 
 function escapeAttr(str) {
   return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
-
-// ---- Initialize ----
-
-connection.trigger('ready');
-connection.trigger('requestSchema');

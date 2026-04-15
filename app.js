@@ -1,101 +1,62 @@
 const express = require('express');
-const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
 const activityRouter = require('./routes/activity');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
-
-// Log ALL incoming requests
+// CORS
 app.use((req, res, next) => {
-  console.log('[REQUEST]', req.method, req.url, 'Content-Type:', req.headers['content-type']);
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-sfmc-activity-key');
+  if (req.method === 'OPTIONS') return res.status(200).end();
   next();
 });
 
-// Parse body - try JSON first, fallback to raw text for JWT
-app.use(express.json({ limit: '1mb' }));
+// Normalize double slashes
+app.use((req, res, next) => {
+  if (req.url.includes('//')) req.url = req.url.replace(/\/\/+/g, '/');
+  next();
+});
+
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-// Catch JSON parse errors (MC may send JWT as body with application/json content-type)
-app.use((err, req, res, next) => {
-  if (err.type === 'entity.parse.failed') {
-    console.log('[BODY-PARSE] JSON parse failed, reading raw body');
-    req.body = err.body || '';
-    next();
-  } else {
-    next(err);
-  }
+
+// Log all requests
+app.use((req, res, next) => {
+  console.log('[' + new Date().toISOString() + ']', req.method, req.url);
+  next();
 });
 
-// Serve config.json dynamically
+// Serve config.json dynamically with BASE_URL replacement (BEFORE static)
 app.get('/config.json', (req, res) => {
-  var baseUrl = process.env.BASE_URL || 'https://postcallerca-production.up.railway.app/';
-  if (!baseUrl.endsWith('/')) baseUrl += '/';
-
-  res.json({
-    workflowApiVersion: '1.1',
-    key: process.env.ACTIVITY_KEY || 'REST-ACTIVITY-POST-CALLER',
-    metaData: {
-      icon: baseUrl + 'images/icon.svg',
-      category: 'message',
-      isConfigured: false
-    },
-    type: 'REST',
-    lang: {
-      'en-US': {
-        name: 'API POST',
-        description: 'Envia dados da jornada via POST para uma API externa'
-      }
-    },
-    arguments: {
-      execute: {
-        inArguments: [],
-        outArguments: [],
-        timeout: 30000,
-        retryCount: 1,
-        retryDelay: 1000,
-        concurrentRequests: 5,
-        url: baseUrl + 'activity/execute'
-      }
-    },
-    configurationArguments: {
-      save: { url: baseUrl + 'activity/save' },
-      publish: { url: baseUrl + 'activity/publish' },
-      validate: { url: baseUrl + 'activity/validate' },
-      stop: { url: baseUrl + 'activity/stop' }
-    },
-    wizardSteps: [
-      { label: 'Configurar API', key: 'step1' }
-    ],
-    userInterfaces: {
-      configModal: { height: 600, width: 800, fullscreen: false }
-    },
-    schema: {
-      arguments: {
-        execute: { inArguments: [], outArguments: [] }
-      }
-    }
-  });
+  var configPath = path.join(__dirname, 'public', 'config.json');
+  var raw = fs.readFileSync(configPath, 'utf8');
+  var baseUrl = (process.env.BASE_URL || '').replace(/\/+$/, '');
+  var config = raw.replace(/\{\{BASE_URL\}\}/g, baseUrl);
+  res.type('application/json').send(config);
 });
 
-// Serve frontend files
-app.use(express.static('public'));
+// Serve static files
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Activity endpoints
 app.use('/activity', activityRouter);
 
 // Health check
-app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', baseUrl: process.env.BASE_URL, timestamp: new Date().toISOString() });
+});
 
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error('[ERROR]', req.method, req.url, err.message);
-  res.status(200).json({ success: true });
+// Catch-all
+app.use((req, res) => {
+  console.log('[404]', req.method, req.url);
+  res.status(404).json({ error: 'Not found', path: req.url });
 });
 
 app.listen(PORT, () => {
   console.log('CA Post running on port ' + PORT);
-  console.log('BASE_URL:', process.env.BASE_URL || '(not set)');
-  console.log('ACTIVITY_KEY:', process.env.ACTIVITY_KEY || '(not set)');
-  console.log('JWT_SECRET:', process.env.JWT_SECRET ? '(set)' : '(not set)');
+  console.log('BASE_URL:', process.env.BASE_URL);
 });

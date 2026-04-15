@@ -140,10 +140,12 @@ function saveActivity() {
       inArgs[name] = sel ? sel.value : '';
     } else if (type === 'lookup') {
       var deName = row.querySelector('.lookup-de').value.trim();
-      var keyField = row.querySelector('.lookup-key-field').value.trim();
+      var keyFieldSel = row.querySelector('.lookup-key-field');
+      var keyField = keyFieldSel ? keyFieldSel.value : '';
       var keyValueSel = row.querySelector('.lookup-key-value');
       var keyValue = keyValueSel ? keyValueSel.value : '';
-      var returnField = row.querySelector('.lookup-return').value.trim();
+      var returnFieldSel = row.querySelector('.lookup-return');
+      var returnField = returnFieldSel ? returnFieldSel.value : '';
       inArgs[name] = '_lookup_:' + deName + ':' + keyField + ':' + keyValue + ':' + returnField;
     } else {
       var input = row.querySelector('.fvalue');
@@ -205,12 +207,67 @@ function buildLookupFields(value) {
   }
 
   var html = '<div class="lookup-container">' +
-    '<input type="text" class="lookup-de" placeholder="Nome da DE" value="' + escapeAttr(deName) + '">' +
-    '<input type="text" class="lookup-key-field" placeholder="Campo chave (ex: SubscriberKey)" value="' + escapeAttr(keyField) + '">' +
+    '<input type="text" class="lookup-de" placeholder="External Key da DE" value="' + escapeAttr(deName) + '" onblur="onLookupDeBlur(this)">' +
+    '<select class="lookup-key-field"><option value="">-- Campo chave --</option></select>' +
     buildJourneySelectForLookup(keyValue) +
-    '<input type="text" class="lookup-return" placeholder="Campo retorno" value="' + escapeAttr(returnField) + '">' +
+    '<select class="lookup-return"><option value="">-- Campo retorno --</option></select>' +
     '</div>';
+
+  // If restoring, schedule field loading after DOM insert
+  if (deName) {
+    setTimeout(function () {
+      var containers = document.querySelectorAll('.lookup-container');
+      var container = containers[containers.length - 1];
+      if (container) {
+        loadDeFields(container, deName, keyField, returnField);
+      }
+    }, 100);
+  }
+
   return html;
+}
+
+function onLookupDeBlur(input) {
+  var deKey = input.value.trim();
+  var container = input.closest('.lookup-container');
+  if (!deKey || !container) return;
+  loadDeFields(container, deKey, '', '');
+}
+
+function loadDeFields(container, deKey, selectedKeyField, selectedReturnField) {
+  var keySelect = container.querySelector('.lookup-key-field');
+  var returnSelect = container.querySelector('.lookup-return');
+
+  keySelect.innerHTML = '<option value="">Carregando...</option>';
+  returnSelect.innerHTML = '<option value="">Carregando...</option>';
+
+  fetch('/activity/de-fields?key=' + encodeURIComponent(deKey))
+    .then(function (resp) { return resp.json(); })
+    .then(function (data) {
+      var fields = data.fields || [];
+      if (fields.length === 0) {
+        keySelect.innerHTML = '<option value="">Nenhum campo encontrado</option>';
+        returnSelect.innerHTML = '<option value="">Nenhum campo encontrado</option>';
+        return;
+      }
+
+      var keyHtml = '<option value="">-- Campo chave --</option>';
+      var retHtml = '<option value="">-- Campo retorno --</option>';
+      for (var i = 0; i < fields.length; i++) {
+        var f = fields[i];
+        var selKey = (selectedKeyField && selectedKeyField === f) ? ' selected' : '';
+        var selRet = (selectedReturnField && selectedReturnField === f) ? ' selected' : '';
+        keyHtml += '<option value="' + escapeAttr(f) + '"' + selKey + '>' + escapeAttr(f) + '</option>';
+        retHtml += '<option value="' + escapeAttr(f) + '"' + selRet + '>' + escapeAttr(f) + '</option>';
+      }
+      keySelect.innerHTML = keyHtml;
+      returnSelect.innerHTML = retHtml;
+    })
+    .catch(function (err) {
+      console.error('[CA] Error loading DE fields:', err);
+      keySelect.innerHTML = '<option value="">Erro ao carregar</option>';
+      returnSelect.innerHTML = '<option value="">Erro ao carregar</option>';
+    });
 }
 
 function buildJourneySelectForLookup(selectedValue) {

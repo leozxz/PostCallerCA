@@ -71,6 +71,42 @@ router.get('/contact-attributes', async function (req, res) {
   }
 });
 
+// GET /activity/de-fields -- fetch fields of a Data Extension by external key
+router.get('/de-fields', async function (req, res) {
+  var deKey = req.query.key;
+  if (!deKey || !process.env.SFMC_CLIENT_ID) {
+    return res.json({ fields: [] });
+  }
+
+  try {
+    var apiBase = process.env.SFMC_API_BASE.replace(/\/+$/, '');
+    var token = await sfmcAuth.getAccessToken();
+
+    var resp = await axios.get(
+      apiBase + '/data/v1/customobjectdata/key/' + encodeURIComponent(deKey) + '/rowset?$page=1&$pageSize=1',
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+
+    var items = resp.data.items || [];
+    var fields = [];
+    if (items.length > 0) {
+      var row = items[0];
+      if (row.keys) {
+        Object.keys(row.keys).forEach(function (f) { fields.push(f); });
+      }
+      if (row.values) {
+        Object.keys(row.values).forEach(function (f) { fields.push(f); });
+      }
+    }
+
+    console.log('[DE-FIELDS] DE=' + deKey + ' fields=' + fields.join(', '));
+    res.json({ fields: fields });
+  } catch (err) {
+    console.error('[DE-FIELDS] Error:', err.response ? err.response.status + ' ' + JSON.stringify(err.response.data) : err.message);
+    res.json({ fields: [], error: err.message });
+  }
+});
+
 // POST /activity/save -- echo body (200 required by JB)
 router.post('/save', function (req, res) {
   console.log('[SAVE]', JSON.stringify(req.body));

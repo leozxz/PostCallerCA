@@ -40,15 +40,38 @@ router.get('/contact-attributes', async function (req, res) {
 
     // Fetch value definitions for each set (limit to first 30 to avoid timeout)
     var groups = [];
+    // Debug: fetch first set and log full structure
+    if (validSets.length > 0) {
+      try {
+        var dbg = await axios.get(
+          apiBase + '/contacts/v1/attributeSetDefinitions/key:' + validSets[0].key,
+          { headers: { Authorization: 'Bearer ' + token } }
+        );
+        var item = dbg.data.item || dbg.data;
+        console.log('[CONTACT-ATTRS] Full keys of set:', Object.keys(item));
+        // Log any key that contains array
+        Object.keys(item).forEach(function(k) {
+          if (Array.isArray(item[k])) {
+            console.log('[CONTACT-ATTRS] Array key "' + k + '" length:', item[k].length);
+            if (item[k].length > 0) {
+              console.log('[CONTACT-ATTRS] First item of "' + k + '":', JSON.stringify(item[k][0]).substring(0, 400));
+            }
+          }
+        });
+      } catch(e) {
+        console.error('[CONTACT-ATTRS] Debug error:', e.message);
+      }
+    }
+
     var setsToFetch = validSets.slice(0, 30);
     var fetchResults = await Promise.all(setsToFetch.map(function (set) {
       return axios.get(
-        apiBase + '/contacts/v1/attributeSetDefinitions/key:' + set.key + '?$expand=valueDefinitions',
+        apiBase + '/contacts/v1/attributeSetDefinitions/key:' + set.key,
         { headers: { Authorization: 'Bearer ' + token } }
       )
         .then(function (resp) {
           var setData = resp.data.item || resp.data;
-          var attrs = setData.valueDefinitions || [];
+          var attrs = setData.valueDefinitions || setData.values || setData.attributes || [];
 
           // Log first successful result for debugging
           if (attrs.length > 0 && groups.length === 0) {

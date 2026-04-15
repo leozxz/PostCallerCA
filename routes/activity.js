@@ -108,18 +108,16 @@ async function resolveLookups(payload, token) {
     // Lookup format: _lookup_:DEName:keyField:keyValue:returnField
     if (typeof val === 'string' && val.indexOf('_lookup_:') === 0) {
       var parts = val.split(':');
-      // parts: [_lookup_, DEName, keyField, keyValue, returnField]
+      // parts[0]=_lookup_, parts[1]=DE, parts[2]=keyField, parts[last]=returnField
+      // keyValue is everything between keyField and returnField (may contain colons)
       if (parts.length >= 5) {
         (function (fieldName, deName, keyField, keyValue, returnField) {
+          var filterStr = keyField + " eq '" + keyValue + "'";
+          var url = apiBase + '/data/v1/customobjectdata/key/' + encodeURIComponent(deName) + '/rowset'
+            + '?$filter=' + encodeURIComponent(filterStr)
+            + '&$page=1&$pageSize=1';
           lookupPromises.push(
-            axios.post(
-              apiBase + '/data/v1/customobjectdata/key/' + encodeURIComponent(deName) + '/rowset',
-              {
-                page: { page: 1, pageSize: 1 },
-                filter: { leftOperand: keyField, operator: 'Equals', rightOperand: keyValue }
-              },
-              { headers: { Authorization: 'Bearer ' + token } }
-            )
+            axios.get(url, { headers: { Authorization: 'Bearer ' + token } })
               .then(function (resp) {
                 var rows = resp.data.items || [];
                 if (rows.length > 0 && rows[0].values) {
@@ -134,7 +132,7 @@ async function resolveLookups(payload, token) {
                 resolved[fieldName] = '';
               })
           );
-        })(key, parts[1], parts[2], parts[3], parts[4]);
+        })(key, parts[1], parts[2], parts.slice(3, parts.length - 1).join(':'), parts[parts.length - 1]);
       }
     } else {
       resolved[key] = val;

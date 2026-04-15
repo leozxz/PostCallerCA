@@ -1,5 +1,6 @@
 {
   "workflowApiVersion": "1.1",
+  "key": "967f439a-d642-4b6e-89b1-7d7df497f938",
   "metaData": {
     "icon": "icon.png",
     "category": "message"
@@ -16,21 +17,39 @@
       "inArguments": [],
       "outArguments": [],
       "url": "{{BASE_URL}}/activity/execute",
+      "verb": "POST",
+      "body": "",
+      "header": "",
+      "format": "json",
+      "useJwt": false,
       "timeout": 30000
     }
   },
   "configurationArguments": {
+    "applicationExtensionKey": "967f439a-d642-4b6e-89b1-7d7df497f938",
     "save": {
-      "url": "{{BASE_URL}}/activity/save"
+      "url": "{{BASE_URL}}/activity/save",
+      "verb": "POST",
+      "body": "",
+      "useJwt": false
     },
     "validate": {
-      "url": "{{BASE_URL}}/activity/validate"
+      "url": "{{BASE_URL}}/activity/validate",
+      "verb": "POST",
+      "body": "",
+      "useJwt": false
     },
     "publish": {
-      "url": "{{BASE_URL}}/activity/publish"
+      "url": "{{BASE_URL}}/activity/publish",
+      "verb": "POST",
+      "body": "",
+      "useJwt": false
     },
     "stop": {
-      "url": "{{BASE_URL}}/activity/stop"
+      "url": "{{BASE_URL}}/activity/stop",
+      "verb": "POST",
+      "body": "",
+      "useJwt": false
     }
   },
   "wizardSteps": [

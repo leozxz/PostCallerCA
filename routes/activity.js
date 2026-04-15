@@ -44,7 +44,7 @@ router.get('/contact-attributes', async function (req, res) {
           attrs.forEach(function (attr) {
             var attrName = (attr.name && attr.name.value) ? attr.name.value : (attr.name || '');
             var isHidden = attr.isHidden || (attr.access && attr.access === 'Hidden');
-            if (attrName && !isHidden && !attr.isReadOnly) {
+            if (attrName && !isHidden) {
               fields.push({
                 key: '{{Contact.Attribute.' + set.name + '.' + attrName + '}}',
                 label: attrName
@@ -95,52 +95,114 @@ router.post('/stop', function (req, res) {
   res.status(200).json(req.body);
 });
 
-// POST /activity/execute -- called when a contact reaches the activity
-router.post('/execute', function (req, res) {
-  console.log('[EXECUTE] Incoming:', JSON.stringify(req.body));
+// Helper: resolve DE lookups in payload
+async function resolveLookups(payload, token) {
+  var apiBase = (process.env.SFMC_API_BASE || '').replace(/\/+$/, '');
+  if (!apiBase || !token) return payload;
 
-  var inArguments = req.body.inArguments;
-  if (!inArguments || !inArguments.length) {
-    console.error('[EXECUTE] No inArguments found');
-    return res.status(200).json({ success: false, error: 'No inArguments' });
-  }
+  var resolved = {};
+  var lookupPromises = [];
 
-  var args = inArguments[0];
-  var targetUrl = args._targetUrl;
-  var method = (args._httpMethod || 'POST').toUpperCase();
-  var headers = {};
-  var payload = {};
-
-  for (var key in args) {
-    if (key.indexOf('_header_') === 0) {
-      headers[key.replace('_header_', '')] = args[key];
-    } else if (key.indexOf('_') !== 0) {
-      payload[key] = args[key];
+  for (var key in payload) {
+    var val = payload[key];
+    // Lookup format: _lookup_:DEName:keyField:keyValue:returnField
+    if (typeof val === 'string' && val.indexOf('_lookup_:') === 0) {
+      var parts = val.split(':');
+      // parts: [_lookup_, DEName, keyField, keyValue, returnField]
+      if (parts.length >= 5) {
+        (function (fieldName, deName, keyField, keyValue, returnField) {
+          lookupPromises.push(
+            axios.post(
+              apiBase + '/data/v1/customobjectdata/key/' + encodeURIComponent(deName) + '/rowset',
+              {
+                page: { page: 1, pageSize: 1 },
+                filter: { leftOperand: keyField, operator: 'Equals', rightOperand: keyValue }
+              },
+              { headers: { Authorization: 'Bearer ' + token } }
+            )
+              .then(function (resp) {
+                var rows = resp.data.items || [];
+                if (rows.length > 0 && rows[0].values) {
+                  resolved[fieldName] = rows[0].values[returnField] || '';
+                } else {
+                  resolved[fieldName] = '';
+                }
+                console.log('[LOOKUP] ' + deName + '.' + returnField + ' = ' + resolved[fieldName]);
+              })
+              .catch(function (err) {
+                console.error('[LOOKUP] Error for ' + deName + ':', err.message);
+                resolved[fieldName] = '';
+              })
+          );
+        })(key, parts[1], parts[2], parts[3], parts[4]);
+      }
+    } else {
+      resolved[key] = val;
     }
   }
 
-  if (!targetUrl) {
-    console.error('[EXECUTE] No target URL configured');
-    return res.status(200).json({ success: false, error: 'No target URL' });
+  if (lookupPromises.length > 0) {
+    await Promise.all(lookupPromises);
   }
+  return resolved;
+}
 
-  console.log('[EXECUTE] ' + method + ' ' + targetUrl, JSON.stringify(payload));
+// POST /activity/execute -- called when a contact reaches the activity
+router.post('/execute', async function (req, res) {
+  console.log('[EXECUTE] Incoming:', JSON.stringify(req.body));
 
-  axios({
-    method: method,
-    url: targetUrl,
-    data: payload,
-    headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
-    timeout: 10000
-  })
-    .then(function (response) {
-      console.log('[EXECUTE] Response:', response.status, JSON.stringify(response.data));
-      res.status(200).json({ success: true });
-    })
-    .catch(function (err) {
-      console.error('[EXECUTE] Error:', err.message);
-      res.status(200).json({ success: false, error: err.message });
+  try {
+    var inArguments = req.body.inArguments;
+    if (!inArguments || !inArguments.length) {
+      console.error('[EXECUTE] No inArguments found');
+      return res.status(200).json({ success: false, error: 'No inArguments' });
+    }
+
+    var args = inArguments[0];
+    var targetUrl = args._targetUrl;
+    var method = (args._httpMethod || 'POST').toUpperCase();
+    var headers = {};
+    var payload = {};
+
+    for (var key in args) {
+      if (key.indexOf('_header_') === 0) {
+        headers[key.replace('_header_', '')] = args[key];
+      } else if (key.indexOf('_') !== 0) {
+        payload[key] = args[key];
+      }
+    }
+
+    if (!targetUrl) {
+      console.error('[EXECUTE] No target URL configured');
+      return res.status(200).json({ success: false, error: 'No target URL' });
+    }
+
+    // Resolve any DE lookups
+    var token = null;
+    var hasLookups = Object.values(payload).some(function (v) {
+      return typeof v === 'string' && v.indexOf('_lookup_:') === 0;
     });
+    if (hasLookups && process.env.SFMC_CLIENT_ID) {
+      token = await sfmcAuth.getAccessToken();
+      payload = await resolveLookups(payload, token);
+    }
+
+    console.log('[EXECUTE] ' + method + ' ' + targetUrl, JSON.stringify(payload));
+
+    var response = await axios({
+      method: method,
+      url: targetUrl,
+      data: payload,
+      headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+      timeout: 10000
+    });
+
+    console.log('[EXECUTE] Response:', response.status, JSON.stringify(response.data));
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error('[EXECUTE] Error:', err.message);
+    res.status(200).json({ success: false, error: err.message });
+  }
 });
 
 module.exports = router;

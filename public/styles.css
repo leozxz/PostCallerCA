@@ -240,6 +240,33 @@ input[type="text"]::placeholder {
   color: #ef4444;
 }
 
+/* Lookup container */
+.lookup-container {
+  flex: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lookup-container input,
+.lookup-container select {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-family: inherit;
+  color: #1a1a2e;
+  background: #fff;
+}
+
+.lookup-container input:focus,
+.lookup-container select:focus {
+  outline: none;
+  border-color: #1B96FF;
+  box-shadow: 0 0 0 2px rgba(27, 150, 255, 0.12);
+}
+
 /* Empty state */
 #fields-container:empty,
 #headers-container:empty {

@@ -5,7 +5,6 @@ var activityPayload = {};
 var schemaFields = [];
 var contactGroups = [];
 
-// Fire ready immediately at top level
 connection.trigger('ready');
 
 connection.on('initActivity', function(payload) {
@@ -43,14 +42,13 @@ connection.on('gotoStep', function(step) {
   console.log('[CA] gotoStep', JSON.stringify(step));
 });
 
-// ---- Load contact attributes from server ----
+// ---- Load contact attributes ----
 
 function loadContactAttributes() {
   fetch('/activity/contact-attributes')
     .then(function(resp) { return resp.json(); })
     .then(function(data) {
       contactGroups = data.groups || [];
-      console.log('[CA] contact groups', JSON.stringify(contactGroups));
       updateAllContactDropdowns();
     })
     .catch(function(err) {
@@ -75,12 +73,14 @@ function parseSchema(data) {
   return fields;
 }
 
-// ---- Detect field type from saved value ----
+// ---- Detect field type ----
 
 function detectFieldType(value) {
-  if (typeof value !== 'string' || value.indexOf('{{') === -1) return 'fixed';
+  if (typeof value !== 'string') return 'fixed';
+  if (value.indexOf('_lookup_:') === 0) return 'lookup';
   if (value.indexOf('{{Contact.') !== -1) return 'contact';
-  return 'journey';
+  if (value.indexOf('{{') !== -1) return 'journey';
+  return 'fixed';
 }
 
 // ---- Restore saved config ----
@@ -131,12 +131,20 @@ function saveActivity() {
     var name = row.querySelector('.fname').value.trim();
     var type = row.querySelector('.ftype').value;
     if (!name) return;
+
     if (type === 'journey') {
       var sel = row.querySelector('.fvalue-select');
       inArgs[name] = sel ? sel.value : '';
     } else if (type === 'contact') {
       var sel = row.querySelector('.fvalue-contact-select');
       inArgs[name] = sel ? sel.value : '';
+    } else if (type === 'lookup') {
+      var deName = row.querySelector('.lookup-de').value.trim();
+      var keyField = row.querySelector('.lookup-key-field').value.trim();
+      var keyValueSel = row.querySelector('.lookup-key-value');
+      var keyValue = keyValueSel ? keyValueSel.value : '';
+      var returnField = row.querySelector('.lookup-return').value.trim();
+      inArgs[name] = '_lookup_:' + deName + ':' + keyField + ':' + keyValue + ':' + returnField;
     } else {
       var input = row.querySelector('.fvalue');
       inArgs[name] = input ? input.value.trim() : '';
@@ -154,11 +162,11 @@ function saveActivity() {
   connection.trigger('updateActivity', activityPayload);
 }
 
-// ---- UI helpers ----
+// ---- UI builders ----
 
 function buildJourneySelect(selectedValue) {
   var html = '<select class="fvalue-select">';
-  html += '<option value="">-- Selecione um campo --</option>';
+  html += '<option value="">-- Selecione --</option>';
   for (var i = 0; i < schemaFields.length; i++) {
     var f = schemaFields[i];
     var sel = (selectedValue && selectedValue === f.key) ? ' selected' : '';
@@ -170,7 +178,7 @@ function buildJourneySelect(selectedValue) {
 
 function buildContactSelect(selectedValue) {
   var html = '<select class="fvalue-contact-select">';
-  html += '<option value="">-- Selecione um campo --</option>';
+  html += '<option value="">-- Selecione --</option>';
   for (var g = 0; g < contactGroups.length; g++) {
     var group = contactGroups[g];
     html += '<optgroup label="' + escapeAttr(group.name) + '">';
@@ -185,9 +193,42 @@ function buildContactSelect(selectedValue) {
   return html;
 }
 
+function buildLookupFields(value) {
+  // Parse: _lookup_:DEName:keyField:keyValue:returnField
+  var deName = '', keyField = '', keyValue = '', returnField = '';
+  if (value && value.indexOf('_lookup_:') === 0) {
+    var parts = value.split(':');
+    deName = parts[1] || '';
+    keyField = parts[2] || '';
+    keyValue = parts[3] || '';
+    returnField = parts[4] || '';
+  }
+
+  var html = '<div class="lookup-container">' +
+    '<input type="text" class="lookup-de" placeholder="Nome da DE" value="' + escapeAttr(deName) + '">' +
+    '<input type="text" class="lookup-key-field" placeholder="Campo chave (ex: SubscriberKey)" value="' + escapeAttr(keyField) + '">' +
+    buildJourneySelectForLookup(keyValue) +
+    '<input type="text" class="lookup-return" placeholder="Campo retorno" value="' + escapeAttr(returnField) + '">' +
+    '</div>';
+  return html;
+}
+
+function buildJourneySelectForLookup(selectedValue) {
+  var html = '<select class="lookup-key-value">';
+  html += '<option value="">-- Valor chave (jornada) --</option>';
+  for (var i = 0; i < schemaFields.length; i++) {
+    var f = schemaFields[i];
+    var sel = (selectedValue && selectedValue === f.key) ? ' selected' : '';
+    html += '<option value="' + escapeAttr(f.key) + '"' + sel + '>' + escapeAttr(f.label) + '</option>';
+  }
+  html += '</select>';
+  return html;
+}
+
 function buildValueElement(type, value) {
   if (type === 'journey') return buildJourneySelect(value);
   if (type === 'contact') return buildContactSelect(value);
+  if (type === 'lookup') return buildLookupFields(value);
   return '<input type="text" class="fvalue" placeholder="valor fixo" value="' + escapeAttr(value || '') + '">';
 }
 
@@ -202,6 +243,7 @@ function addField(name, type, value) {
       '<option value="fixed"' + (type === 'fixed' || !type ? ' selected' : '') + '>Valor Fixo</option>' +
       '<option value="journey"' + (type === 'journey' ? ' selected' : '') + '>Dado da Jornada</option>' +
       '<option value="contact"' + (type === 'contact' ? ' selected' : '') + '>Dado do Contato</option>' +
+      '<option value="lookup"' + (type === 'lookup' ? ' selected' : '') + '>Lookup DE</option>' +
     '</select>' +
     buildValueElement(type, value) +
     '<button class="btn btn-remove" onclick="removeRow(this)" title="Remover">&times;</button>';
@@ -224,12 +266,9 @@ function removeRow(btn) { btn.parentElement.remove(); }
 
 function onTypeChange(select) {
   var row = select.closest('.field-row');
-  var oldInput = row.querySelector('.fvalue');
-  var oldSelect = row.querySelector('.fvalue-select');
-  var oldContact = row.querySelector('.fvalue-contact-select');
-  if (oldInput) oldInput.remove();
-  if (oldSelect) oldSelect.remove();
-  if (oldContact) oldContact.remove();
+  // Remove all value elements
+  var toRemove = row.querySelectorAll('.fvalue, .fvalue-select, .fvalue-contact-select, .lookup-container');
+  toRemove.forEach(function(el) { el.remove(); });
 
   var removeBtn = row.querySelector('.btn-remove');
   var wrapper = document.createElement('span');
@@ -238,21 +277,26 @@ function onTypeChange(select) {
 }
 
 function updateAllJourneyDropdowns() {
-  var selects = document.querySelectorAll('.fvalue-select');
-  selects.forEach(function(sel) {
-    var currentVal = sel.value;
+  document.querySelectorAll('.fvalue-select').forEach(function(sel) {
+    var val = sel.value;
     var wrapper = document.createElement('span');
-    wrapper.innerHTML = buildJourneySelect(currentVal);
+    wrapper.innerHTML = buildJourneySelect(val);
+    sel.parentNode.replaceChild(wrapper.firstChild, sel);
+  });
+  // Also update lookup key value dropdowns
+  document.querySelectorAll('.lookup-key-value').forEach(function(sel) {
+    var val = sel.value;
+    var wrapper = document.createElement('span');
+    wrapper.innerHTML = buildJourneySelectForLookup(val);
     sel.parentNode.replaceChild(wrapper.firstChild, sel);
   });
 }
 
 function updateAllContactDropdowns() {
-  var selects = document.querySelectorAll('.fvalue-contact-select');
-  selects.forEach(function(sel) {
-    var currentVal = sel.value;
+  document.querySelectorAll('.fvalue-contact-select').forEach(function(sel) {
+    var val = sel.value;
     var wrapper = document.createElement('span');
-    wrapper.innerHTML = buildContactSelect(currentVal);
+    wrapper.innerHTML = buildContactSelect(val);
     sel.parentNode.replaceChild(wrapper.firstChild, sel);
   });
 }

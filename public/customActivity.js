@@ -58,6 +58,14 @@ function parseSchema(data) {
   return fields;
 }
 
+// ---- Detect field type from saved value ----
+
+function detectFieldType(value) {
+  if (typeof value !== 'string' || value.indexOf('{{') === -1) return 'fixed';
+  if (value.indexOf('{{Contact.') !== -1) return 'contact';
+  return 'journey';
+}
+
 // ---- Restore saved config ----
 
 function restoreConfig(args) {
@@ -77,8 +85,8 @@ function restoreConfig(args) {
   for (var key in args) {
     if (!key.startsWith('_')) {
       var value = args[key];
-      var isJourney = typeof value === 'string' && value.indexOf('{{') !== -1;
-      addField(key, isJourney ? 'journey' : 'fixed', value);
+      var type = detectFieldType(value);
+      addField(key, type, value);
     }
   }
 }
@@ -109,6 +117,14 @@ function saveActivity() {
     if (type === 'journey') {
       var sel = row.querySelector('.fvalue-select');
       inArgs[name] = sel ? sel.value : '';
+    } else if (type === 'contact') {
+      var input = row.querySelector('.fvalue-contact');
+      var val = input ? input.value.trim() : '';
+      // Wrap in {{ }} if user didn't
+      if (val && val.indexOf('{{') === -1) {
+        val = '{{Contact.Attribute.' + val + '}}';
+      }
+      inArgs[name] = val;
     } else {
       var input = row.querySelector('.fvalue');
       inArgs[name] = input ? input.value.trim() : '';
@@ -140,22 +156,36 @@ function buildJourneySelect(selectedValue) {
   return html;
 }
 
+function buildContactInput(value) {
+  // Strip {{ }} wrapper for display
+  var displayVal = value || '';
+  if (displayVal.indexOf('{{Contact.Attribute.') === 0) {
+    displayVal = displayVal.replace('{{Contact.Attribute.', '').replace('}}', '');
+  } else if (displayVal.indexOf('{{Contact.') === 0) {
+    displayVal = displayVal.replace('{{', '').replace('}}', '');
+  }
+  return '<input type="text" class="fvalue-contact" placeholder="NomeDaDE.Campo" value="' + escapeAttr(displayVal) + '">';
+}
+
+function buildValueElement(type, value) {
+  if (type === 'journey') return buildJourneySelect(value);
+  if (type === 'contact') return buildContactInput(value);
+  return '<input type="text" class="fvalue" placeholder="valor fixo" value="' + escapeAttr(value || '') + '">';
+}
+
 function addField(name, type, value) {
   var container = document.getElementById('fields-container');
   var row = document.createElement('div');
   row.className = 'field-row';
-
-  var valueHtml = (type === 'journey')
-    ? buildJourneySelect(value)
-    : '<input type="text" class="fvalue" placeholder="valor fixo" value="' + escapeAttr(value || '') + '">';
 
   row.innerHTML =
     '<input type="text" class="fname" placeholder="nome_campo" value="' + escapeAttr(name || '') + '">' +
     '<select class="ftype" onchange="onTypeChange(this)">' +
       '<option value="fixed"' + (type === 'fixed' || !type ? ' selected' : '') + '>Valor Fixo</option>' +
       '<option value="journey"' + (type === 'journey' ? ' selected' : '') + '>Dado da Jornada</option>' +
+      '<option value="contact"' + (type === 'contact' ? ' selected' : '') + '>Dado do Contato</option>' +
     '</select>' +
-    valueHtml +
+    buildValueElement(type, value) +
     '<button class="btn btn-remove" onclick="removeRow(this)" title="Remover">&times;</button>';
 
   container.appendChild(row);
@@ -178,21 +208,15 @@ function onTypeChange(select) {
   var row = select.closest('.field-row');
   var oldInput = row.querySelector('.fvalue');
   var oldSelect = row.querySelector('.fvalue-select');
+  var oldContact = row.querySelector('.fvalue-contact');
   if (oldInput) oldInput.remove();
   if (oldSelect) oldSelect.remove();
+  if (oldContact) oldContact.remove();
 
   var removeBtn = row.querySelector('.btn-remove');
-  if (select.value === 'journey') {
-    var wrapper = document.createElement('span');
-    wrapper.innerHTML = buildJourneySelect('');
-    row.insertBefore(wrapper.firstChild, removeBtn);
-  } else {
-    var input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'fvalue';
-    input.placeholder = 'valor fixo';
-    row.insertBefore(input, removeBtn);
-  }
+  var wrapper = document.createElement('span');
+  wrapper.innerHTML = buildValueElement(select.value, '');
+  row.insertBefore(wrapper.firstChild, removeBtn);
 }
 
 function updateAllJourneyDropdowns() {

@@ -187,7 +187,8 @@ input[type="text"]::placeholder {
 .field-row .fname { flex: 1; }
 .field-row .ftype { width: 140px; }
 .field-row .fvalue,
-.field-row .fvalue-select { flex: 1.5; }
+.field-row .fvalue-select,
+.field-row .fvalue-contact { flex: 1.5; }
 
 .field-row .hname { flex: 1; }
 .field-row .hvalue { flex: 2; }

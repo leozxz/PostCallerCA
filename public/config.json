@@ -26,7 +26,6 @@
     }
   },
   "configurationArguments": {
-    "applicationExtensionKey": "d2234fd6-86a9-4057-8eef-bb7bd9b318f3",
     "save": {
       "url": "{{BASE_URL}}/activity/save",
       "verb": "POST",

@@ -72,30 +72,6 @@ router.get('/contact-attributes', async function (req, res) {
   }
 });
 
-// GET /activity/de-list -- list available Data Extensions via SOAP
-router.get('/de-list', async function (req, res) {
-  if (!process.env.SFMC_CLIENT_ID) {
-    return res.json({ items: [] });
-  }
-
-  try {
-    var token = await sfmcAuth.getAccessToken();
-    var soapUrl = sfmcAuth.getSoapUrl();
-
-    if (!soapUrl) {
-      console.error('[DE-LIST] No SOAP URL available');
-      return res.json({ items: [], error: 'No SOAP URL' });
-    }
-
-    var des = await sfmcSoap.listDataExtensions(soapUrl, token);
-    console.log('[DE-LIST] Found ' + des.length + ' DEs');
-    res.json({ items: des });
-  } catch (err) {
-    console.error('[DE-LIST] Error:', err.message);
-    res.json({ items: [], error: err.message });
-  }
-});
-
 // GET /activity/de-fields -- fetch fields of a DE via SOAP
 router.get('/de-fields', async function (req, res) {
   var deKey = req.query.key;

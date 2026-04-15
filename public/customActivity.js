@@ -4,7 +4,6 @@ var connection = new Postmonger.Session();
 var activityPayload = {};
 var schemaFields = [];
 var contactGroups = [];
-var availableDEs = [];
 
 connection.trigger('ready');
 
@@ -22,7 +21,6 @@ connection.on('initActivity', function(payload) {
 
   connection.trigger('requestSchema');
   loadContactAttributes();
-  loadDEList();
 });
 
 connection.on('requestedSchema', function(data) {
@@ -56,36 +54,6 @@ function loadContactAttributes() {
     .catch(function(err) {
       console.error('[CA] Error loading contact attributes:', err);
     });
-}
-
-// ---- Load available Data Extensions ----
-
-function loadDEList() {
-  fetch('/activity/de-list')
-    .then(function(resp) { return resp.json(); })
-    .then(function(data) {
-      availableDEs = data.items || [];
-      console.log('[CA] Loaded ' + availableDEs.length + ' DEs');
-      // Update any existing lookup DE selects
-      document.querySelectorAll('.lookup-de').forEach(function(sel) {
-        var val = sel.value;
-        sel.innerHTML = buildDEOptions(val);
-      });
-    })
-    .catch(function(err) {
-      console.error('[CA] Error loading DE list:', err);
-    });
-}
-
-function buildDEOptions(selectedKey) {
-  var html = '<option value="">-- Selecione a DE --</option>';
-  for (var i = 0; i < availableDEs.length; i++) {
-    var de = availableDEs[i];
-    var sel = (selectedKey && selectedKey === de.key) ? ' selected' : '';
-    var label = de.name || de.key;
-    html += '<option value="' + escapeAttr(de.key) + '"' + sel + '>' + escapeAttr(label) + '</option>';
-  }
-  return html;
 }
 
 // ---- Parse schema ----
@@ -171,23 +139,15 @@ function saveActivity() {
       var sel = row.querySelector('.fvalue-contact-select');
       inArgs[name] = sel ? sel.value : '';
     } else if (type === 'lookup') {
-      var deSel = row.querySelector('.lookup-de');
-      var deKey = deSel ? deSel.value : '';
-      // Find the DE name from the availableDEs list (SOAP needs the name, not the key)
-      var deNameForSoap = deKey;
-      for (var d = 0; d < availableDEs.length; d++) {
-        if (availableDEs[d].key === deKey) {
-          deNameForSoap = availableDEs[d].name;
-          break;
-        }
-      }
+      var deInput = row.querySelector('.lookup-de');
+      var deKey = deInput ? deInput.value.trim() : '';
       var keyFieldSel = row.querySelector('.lookup-key-field');
       var keyField = keyFieldSel ? keyFieldSel.value : '';
       var keyValueSel = row.querySelector('.lookup-key-value');
       var keyValue = keyValueSel ? keyValueSel.value : '';
       var returnFieldSel = row.querySelector('.lookup-return');
       var returnField = returnFieldSel ? returnFieldSel.value : '';
-      inArgs[name] = '_lookup_:' + deNameForSoap + ':' + keyField + ':' + keyValue + ':' + returnField;
+      inArgs[name] = '_lookup_:' + deKey + ':' + keyField + ':' + keyValue + ':' + returnField;
     } else {
       var input = row.querySelector('.fvalue');
       inArgs[name] = input ? input.value.trim() : '';
@@ -248,7 +208,8 @@ function buildLookupFields(value) {
   }
 
   var html = '<div class="lookup-container">' +
-    '<select class="lookup-de" onchange="onLookupDeChange(this)">' + buildDEOptions(deName) + '</select>' +
+    '<input type="text" class="lookup-de" placeholder="External Key da DE" value="' + escapeAttr(deName) + '">' +
+    '<button type="button" class="btn-lookup-load" onclick="onLookupDeLoad(this)">Carregar campos</button>' +
     '<select class="lookup-key-field"><option value="">-- Campo chave --</option></select>' +
     buildJourneySelectForLookup(keyValue) +
     '<select class="lookup-return"><option value="">-- Campo retorno --</option></select>' +
@@ -268,10 +229,10 @@ function buildLookupFields(value) {
   return html;
 }
 
-function onLookupDeChange(select) {
-  var deKey = select.value;
-  var container = select.closest('.lookup-container');
-  if (!deKey || !container) return;
+function onLookupDeLoad(btn) {
+  var container = btn.closest('.lookup-container');
+  var deKey = container.querySelector('.lookup-de').value.trim();
+  if (!deKey) return;
   loadDeFields(container, deKey, '', '');
 }
 

@@ -267,6 +267,21 @@ input[type="text"]::placeholder {
   box-shadow: 0 0 0 2px rgba(27, 150, 255, 0.12);
 }
 
+.btn-lookup-load {
+  padding: 4px 10px;
+  font-size: 11px;
+  background: #1B96FF;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btn-lookup-load:hover {
+  background: #0b78e3;
+}
+
 /* Empty state */
 #fields-container:empty,
 #headers-container:empty {

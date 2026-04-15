@@ -95,7 +95,9 @@ function getDataExtensionFields(soapUrl, token, deKey) {
     '</RetrieveRequestMsg>';
 
   return soapRequest(soapUrl, token, body).then(function (xml) {
+    console.log('[SOAP] getDataExtensionFields raw response:', String(xml).substring(0, 1000));
     var results = extractAll(xml, 'Results');
+    console.log('[SOAP] Found ' + results.length + ' Results blocks');
     var fields = [];
     for (var i = 0; i < results.length; i++) {
       var name = extractFirst(results[i], 'Name');

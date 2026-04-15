@@ -1,6 +1,6 @@
 {
   "workflowApiVersion": "1.1",
-  "key": "9889e226-efe9-45bc-aa11-15f6fafc1590",
+  "key": "c4936420-cf35-4b1e-b631-2943030cc90b",
   "metaData": {
     "icon": "icon.png",
     "category": "message"
@@ -26,7 +26,7 @@
     }
   },
   "configurationArguments": {
-    "applicationExtensionKey": "9889e226-efe9-45bc-aa11-15f6fafc1590",
+    "applicationExtensionKey": "c4936420-cf35-4b1e-b631-2943030cc90b",
     "save": {
       "url": "{{BASE_URL}}/activity/save",
       "verb": "POST",

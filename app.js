@@ -12,13 +12,17 @@ app.use(bodyParser.text({ type: 'text/*' }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Serve config.json dynamically so the key comes from env var
+// Serve config.json dynamically so key and base URL come from env vars
 app.get('/config.json', (req, res) => {
+  var baseUrl = process.env.BASE_URL || 'https://postcallerca-production.up.railway.app/';
+  // Ensure trailing slash
+  if (!baseUrl.endsWith('/')) baseUrl += '/';
+
   res.json({
     workflowApiVersion: '1.1',
     key: process.env.ACTIVITY_KEY || 'REST-ACTIVITY-POST-CALLER',
     metaData: {
-      icon: 'images/icon.svg',
+      icon: baseUrl + 'images/icon.svg',
       category: 'message',
       isConfigured: false
     },
@@ -37,14 +41,14 @@ app.get('/config.json', (req, res) => {
         retryCount: 1,
         retryDelay: 1000,
         concurrentRequests: 5,
-        url: '{{=activity.rootUrl}}activity/execute'
+        url: baseUrl + 'activity/execute'
       }
     },
     configurationArguments: {
-      save: { url: '{{=activity.rootUrl}}activity/save' },
-      publish: { url: '{{=activity.rootUrl}}activity/publish' },
-      validate: { url: '{{=activity.rootUrl}}activity/validate' },
-      stop: { url: '{{=activity.rootUrl}}activity/stop' }
+      save: { url: baseUrl + 'activity/save' },
+      publish: { url: baseUrl + 'activity/publish' },
+      validate: { url: baseUrl + 'activity/validate' },
+      stop: { url: baseUrl + 'activity/stop' }
     },
     wizardSteps: [
       { label: 'Configurar API', key: 'step1' }

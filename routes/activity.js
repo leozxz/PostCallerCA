@@ -20,8 +20,6 @@ router.get('/contact-attributes', async function (req, res) {
     );
 
     var sets = setsResp.data.items || [];
-    console.log('[CONTACT-ATTRS] Found ' + sets.length + ' attribute sets');
-
     var validSets = [];
     sets.forEach(function (set) {
       var setName = (set.name && set.name.value) ? set.name.value : (set.name || '');
@@ -31,39 +29,9 @@ router.get('/contact-attributes', async function (req, res) {
       }
     });
 
-    console.log('[CONTACT-ATTRS] Valid sets: ' + validSets.length);
-
-    // The initial response already contains all we need - each set has
-    // valueDefinitions nested. But the list endpoint doesn't include them.
-    // We need to fetch each set individually to get valueDefinitions.
-    // The response wraps in "item" (singular).
-
-    // Fetch value definitions for each set (limit to first 30 to avoid timeout)
+    // Fetch value definitions for each set
     var groups = [];
-    // Debug: fetch first set and log full structure
-    if (validSets.length > 0) {
-      try {
-        var dbg = await axios.get(
-          apiBase + '/contacts/v1/attributeSetDefinitions/key:' + validSets[0].key,
-          { headers: { Authorization: 'Bearer ' + token } }
-        );
-        var item = dbg.data.item || dbg.data;
-        console.log('[CONTACT-ATTRS] Full keys of set:', Object.keys(item));
-        // Log any key that contains array
-        Object.keys(item).forEach(function(k) {
-          if (Array.isArray(item[k])) {
-            console.log('[CONTACT-ATTRS] Array key "' + k + '" length:', item[k].length);
-            if (item[k].length > 0) {
-              console.log('[CONTACT-ATTRS] First item of "' + k + '":', JSON.stringify(item[k][0]).substring(0, 400));
-            }
-          }
-        });
-      } catch(e) {
-        console.error('[CONTACT-ATTRS] Debug error:', e.message);
-      }
-    }
-
-    var setsToFetch = validSets.slice(0, 30);
+    var setsToFetch = validSets.slice(0, 50);
     var fetchResults = await Promise.all(setsToFetch.map(function (set) {
       return axios.get(
         apiBase + '/contacts/v1/attributeSetDefinitions/key:' + set.key,
@@ -71,18 +39,12 @@ router.get('/contact-attributes', async function (req, res) {
       )
         .then(function (resp) {
           var setData = resp.data.item || resp.data;
-          var attrs = setData.valueDefinitions || setData.values || setData.attributes || [];
-
-          // Log first successful result for debugging
-          if (attrs.length > 0 && groups.length === 0) {
-            console.log('[CONTACT-ATTRS] Sample attr:', JSON.stringify(attrs[0]).substring(0, 300));
-          }
-
+          var attrs = setData.valueDefinitions || [];
           var fields = [];
           attrs.forEach(function (attr) {
             var attrName = (attr.name && attr.name.value) ? attr.name.value : (attr.name || '');
             var isHidden = attr.isHidden || (attr.access && attr.access === 'Hidden');
-            if (attrName && !isHidden) {
+            if (attrName && !isHidden && !attr.isReadOnly) {
               fields.push({
                 key: '{{Contact.Attribute.' + set.name + '.' + attrName + '}}',
                 label: attrName

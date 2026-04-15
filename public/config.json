@@ -5,7 +5,7 @@
     "icon": "",
     "category": "message"
   },
-  "type": "REST",
+  "type": "Rest",
   "lang": {
     "en-US": {
       "name": "API POST",

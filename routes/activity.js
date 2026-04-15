@@ -11,7 +11,35 @@ router.post('/save', (req, res) => {
 // POST /activity/validate
 router.post('/validate', (req, res) => {
   console.log('[VALIDATE]', JSON.stringify(req.body));
-  res.status(200).json(req.body);
+  var inArguments =
+    req.body &&
+    req.body.arguments &&
+    req.body.arguments.execute &&
+    Array.isArray(req.body.arguments.execute.inArguments)
+      ? req.body.arguments.execute.inArguments
+      : [];
+
+  var errors = [];
+  var args = inArguments[0] || {};
+
+  if (!args._targetUrl) {
+    errors.push({
+      key: 'targetUrl',
+      message: 'Configure uma URL de destino antes de publicar a jornada.'
+    });
+  }
+
+  if (args._targetUrl && !/^https?:\/\//i.test(args._targetUrl)) {
+    errors.push({
+      key: 'targetUrl',
+      message: 'A URL de destino deve comecar com http:// ou https://.'
+    });
+  }
+
+  res.status(200).json({
+    success: errors.length === 0,
+    errors: errors
+  });
 });
 
 // POST /activity/publish

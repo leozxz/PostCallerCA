@@ -71,7 +71,41 @@ router.get('/contact-attributes', async function (req, res) {
   }
 });
 
-// GET /activity/de-fields -- fetch fields of a Data Extension by external key
+// GET /activity/de-list -- list available Data Extensions
+router.get('/de-list', async function (req, res) {
+  if (!process.env.SFMC_CLIENT_ID) {
+    return res.json({ items: [] });
+  }
+
+  try {
+    var apiBase = process.env.SFMC_API_BASE.replace(/\/+$/, '');
+    var token = await sfmcAuth.getAccessToken();
+
+    var resp = await axios.get(
+      apiBase + '/data/v1/customobjectdata',
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    console.log('[DE-LIST] response keys:', Object.keys(resp.data));
+
+    var items = resp.data.items || [];
+    var deList = [];
+    for (var i = 0; i < items.length; i++) {
+      var de = items[i];
+      deList.push({
+        key: de.key || de.customerKey || de.externalKey || '',
+        name: de.name || ''
+      });
+    }
+
+    console.log('[DE-LIST] Found ' + deList.length + ' DEs');
+    res.json({ items: deList });
+  } catch (err) {
+    console.error('[DE-LIST] Error:', err.response ? err.response.status + ' ' + JSON.stringify(err.response.data).substring(0, 300) : err.message);
+    res.json({ items: [], error: err.message });
+  }
+});
+
+// GET /activity/de-fields -- fetch fields of a Data Extension by key or name
 router.get('/de-fields', async function (req, res) {
   var deKey = req.query.key;
   if (!deKey || !process.env.SFMC_CLIENT_ID) {
@@ -83,23 +117,30 @@ router.get('/de-fields', async function (req, res) {
     var token = await sfmcAuth.getAccessToken();
     var fields = [];
 
-    // Try 1: get DE definition via dataevents endpoint (returns schema, no data needed)
-    try {
-      var defResp = await axios.get(
-        apiBase + '/hub/v1/dataevents/key:' + encodeURIComponent(deKey),
-        { headers: { Authorization: 'Bearer ' + token } }
-      );
-      console.log('[DE-FIELDS] dataevents response:', JSON.stringify(defResp.data).substring(0, 500));
-      var dataFields = defResp.data.dataFields || defResp.data.fields || [];
-      for (var i = 0; i < dataFields.length; i++) {
-        var fname = dataFields[i].name || dataFields[i].Name || '';
-        if (fname) fields.push(fname);
+    // Try multiple endpoints to get DE fields
+    var endpoints = [
+      { name: 'dataevents', url: apiBase + '/hub/v1/dataevents/key:' + encodeURIComponent(deKey) },
+      { name: 'customobjectdata', url: apiBase + '/data/v1/customobjectdata/key/' + encodeURIComponent(deKey) }
+    ];
+
+    for (var i = 0; i < endpoints.length; i++) {
+      if (fields.length > 0) break;
+      try {
+        var resp = await axios.get(endpoints[i].url, { headers: { Authorization: 'Bearer ' + token } });
+        console.log('[DE-FIELDS] ' + endpoints[i].name + ' response:', JSON.stringify(resp.data).substring(0, 800));
+
+        // Try to extract fields from various response formats
+        var dataFields = resp.data.dataFields || resp.data.fields || resp.data.columns || [];
+        for (var j = 0; j < dataFields.length; j++) {
+          var fname = dataFields[j].name || dataFields[j].Name || '';
+          if (fname) fields.push(fname);
+        }
+      } catch (e) {
+        console.log('[DE-FIELDS] ' + endpoints[i].name + ' failed:', e.response ? e.response.status + ' ' + JSON.stringify(e.response.data).substring(0, 200) : e.message);
       }
-    } catch (e1) {
-      console.log('[DE-FIELDS] dataevents failed:', e1.response ? e1.response.status : e1.message);
     }
 
-    // Try 2: fallback to reading a row from the DE
+    // Fallback: read a row and extract field names
     if (fields.length === 0) {
       try {
         var rowResp = await axios.get(

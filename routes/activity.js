@@ -112,23 +112,28 @@ async function resolveLookups(payload, token) {
       // keyValue is everything between keyField and returnField (may contain colons)
       if (parts.length >= 5) {
         (function (fieldName, deName, keyField, keyValue, returnField) {
-          var filterStr = keyField + " eq '" + keyValue + "'";
-          var url = apiBase + '/data/v1/customobjectdata/key/' + encodeURIComponent(deName) + '/rowset'
-            + '?$filter=' + encodeURIComponent(filterStr)
-            + '&$page=1&$pageSize=1';
+          var url = apiBase + '/data/v1/customobjectdata/key/' + encodeURIComponent(deName)
+            + '/rows/' + encodeURIComponent(keyField) + '/' + encodeURIComponent(keyValue);
+          console.log('[LOOKUP] GET ' + url);
           lookupPromises.push(
             axios.get(url, { headers: { Authorization: 'Bearer ' + token } })
               .then(function (resp) {
-                var rows = resp.data.items || [];
-                if (rows.length > 0 && rows[0].values) {
-                  resolved[fieldName] = rows[0].values[returnField] || '';
-                } else {
-                  resolved[fieldName] = '';
+                // Response can be a single row object or an array
+                var row = Array.isArray(resp.data.items) ? resp.data.items[0] : resp.data;
+                var val = '';
+                if (row) {
+                  // Check both keys and values objects for the return field
+                  if (row.values && row.values[returnField] !== undefined) {
+                    val = row.values[returnField];
+                  } else if (row.keys && row.keys[returnField] !== undefined) {
+                    val = row.keys[returnField];
+                  }
                 }
-                console.log('[LOOKUP] ' + deName + '.' + returnField + ' = ' + resolved[fieldName]);
+                resolved[fieldName] = val;
+                console.log('[LOOKUP] ' + deName + '.' + returnField + ' = ' + val);
               })
               .catch(function (err) {
-                console.error('[LOOKUP] Error for ' + deName + ':', err.message);
+                console.error('[LOOKUP] Error for ' + deName + ':', err.response ? JSON.stringify(err.response.data) : err.message);
                 resolved[fieldName] = '';
               })
           );

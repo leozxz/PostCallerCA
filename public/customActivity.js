@@ -139,6 +139,8 @@ function saveActivity() {
       var sel = row.querySelector('.fvalue-contact-select');
       inArgs[name] = sel ? sel.value : '';
     } else if (type === 'lookup') {
+      var midInput = row.querySelector('.lookup-mid');
+      var mid = midInput ? midInput.value.trim() : '';
       var deInput = row.querySelector('.lookup-de');
       var deKey = deInput ? deInput.value.trim() : '';
       var keyFieldSel = row.querySelector('.lookup-key-field');
@@ -147,7 +149,7 @@ function saveActivity() {
       var keyValue = keyValueSel ? keyValueSel.value : '';
       var returnFieldSel = row.querySelector('.lookup-return');
       var returnField = returnFieldSel ? returnFieldSel.value : '';
-      inArgs[name] = '_lookup_:' + deKey + ':' + keyField + ':' + keyValue + ':' + returnField;
+      inArgs[name] = '_lookup_:' + mid + ':' + deKey + ':' + keyField + ':' + keyValue + ':' + returnField;
     } else {
       var input = row.querySelector('.fvalue');
       inArgs[name] = input ? input.value.trim() : '';
@@ -197,18 +199,20 @@ function buildContactSelect(selectedValue) {
 }
 
 function buildLookupFields(value) {
-  // Parse: _lookup_:DEName:keyField:keyValue:returnField
-  var deName = '', keyField = '', keyValue = '', returnField = '';
+  // Parse: _lookup_:MID:DEKey:keyField:keyValue:returnField
+  var mid = '', deKey = '', keyField = '', keyValue = '', returnField = '';
   if (value && value.indexOf('_lookup_:') === 0) {
     var parts = value.split(':');
-    deName = parts[1] || '';
-    keyField = parts[2] || '';
-    keyValue = parts[3] || '';
-    returnField = parts[4] || '';
+    mid = parts[1] || '';
+    deKey = parts[2] || '';
+    keyField = parts[3] || '';
+    keyValue = parts[4] || '';
+    returnField = parts[5] || '';
   }
 
   var html = '<div class="lookup-container">' +
-    '<input type="text" class="lookup-de" placeholder="External Key da DE" value="' + escapeAttr(deName) + '">' +
+    '<input type="text" class="lookup-mid" placeholder="MID da BU (opcional)" value="' + escapeAttr(mid) + '">' +
+    '<input type="text" class="lookup-de" placeholder="External Key da DE" value="' + escapeAttr(deKey) + '">' +
     '<button type="button" class="btn-lookup-load" onclick="onLookupDeLoad(this)">Carregar campos</button>' +
     '<select class="lookup-key-field"><option value="">-- Campo chave --</option></select>' +
     buildJourneySelectForLookup(keyValue) +
@@ -216,12 +220,12 @@ function buildLookupFields(value) {
     '</div>';
 
   // If restoring, schedule field loading after DOM insert
-  if (deName) {
+  if (deKey) {
     setTimeout(function () {
       var containers = document.querySelectorAll('.lookup-container');
       var container = containers[containers.length - 1];
       if (container) {
-        loadDeFields(container, deName, keyField, returnField);
+        loadDeFields(container, deKey, mid, keyField, returnField);
       }
     }, 100);
   }
@@ -232,18 +236,21 @@ function buildLookupFields(value) {
 function onLookupDeLoad(btn) {
   var container = btn.closest('.lookup-container');
   var deKey = container.querySelector('.lookup-de').value.trim();
+  var mid = container.querySelector('.lookup-mid').value.trim();
   if (!deKey) return;
-  loadDeFields(container, deKey, '', '');
+  loadDeFields(container, deKey, mid, '', '');
 }
 
-function loadDeFields(container, deKey, selectedKeyField, selectedReturnField) {
+function loadDeFields(container, deKey, mid, selectedKeyField, selectedReturnField) {
   var keySelect = container.querySelector('.lookup-key-field');
   var returnSelect = container.querySelector('.lookup-return');
 
   keySelect.innerHTML = '<option value="">Carregando...</option>';
   returnSelect.innerHTML = '<option value="">Carregando...</option>';
 
-  fetch('/activity/de-fields?key=' + encodeURIComponent(deKey))
+  var url = '/activity/de-fields?key=' + encodeURIComponent(deKey);
+  if (mid) url += '&mid=' + encodeURIComponent(mid);
+  fetch(url)
     .then(function (resp) { return resp.json(); })
     .then(function (data) {
       var fields = data.fields || [];

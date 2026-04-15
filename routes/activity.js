@@ -75,13 +75,14 @@ router.get('/contact-attributes', async function (req, res) {
 // GET /activity/de-fields -- fetch fields of a DE via SOAP
 router.get('/de-fields', async function (req, res) {
   var deKey = req.query.key;
+  var mid = req.query.mid || '';
   if (!deKey || !process.env.SFMC_CLIENT_ID) {
     return res.json({ fields: [] });
   }
 
   try {
-    var token = await sfmcAuth.getAccessToken();
-    var soapUrl = sfmcAuth.getSoapUrl();
+    var token = await sfmcAuth.getAccessTokenForBU(mid);
+    var soapUrl = sfmcAuth.getSoapUrl(mid);
 
     if (!soapUrl) {
       return res.json({ fields: [], error: 'No SOAP URL' });
@@ -90,7 +91,7 @@ router.get('/de-fields', async function (req, res) {
     var deFields = await sfmcSoap.getDataExtensionFields(soapUrl, token, deKey);
     var fields = deFields.map(function (f) { return f.name; });
 
-    console.log('[DE-FIELDS] DE=' + deKey + ' fields=' + fields.join(', '));
+    console.log('[DE-FIELDS] DE=' + deKey + ' MID=' + (mid || 'parent') + ' fields=' + fields.join(', '));
     res.json({ fields: fields });
   } catch (err) {
     console.error('[DE-FIELDS] Error:', err.message);
@@ -123,32 +124,34 @@ router.post('/stop', function (req, res) {
 });
 
 // Helper: resolve DE lookups in payload via SOAP
-async function resolveLookups(payload, token) {
-  var soapUrl = sfmcAuth.getSoapUrl();
-  if (!soapUrl || !token) return payload;
-
+// Lookup format: _lookup_:MID:DEKey:keyField:keyValue:returnField
+async function resolveLookups(payload) {
   var resolved = {};
   var lookupPromises = [];
 
   for (var key in payload) {
     var val = payload[key];
-    // Lookup format: _lookup_:DEName:keyField:keyValue:returnField
     if (typeof val === 'string' && val.indexOf('_lookup_:') === 0) {
       var parts = val.split(':');
-      if (parts.length >= 5) {
-        (function (fieldName, deName, keyField, keyValue, returnField) {
+      // parts[0]=_lookup_, parts[1]=MID, parts[2]=DEKey, parts[3]=keyField, parts[last]=returnField
+      // keyValue = everything between keyField and returnField
+      if (parts.length >= 6) {
+        (function (fieldName, mid, deKey, keyField, keyValue, returnField) {
           lookupPromises.push(
-            sfmcSoap.queryDataExtension(soapUrl, token, deName, [returnField], keyField, keyValue)
+            sfmcAuth.getAccessTokenForBU(mid).then(function (token) {
+              var soapUrl = sfmcAuth.getSoapUrl(mid);
+              return sfmcSoap.queryDataExtension(soapUrl, token, deKey, [returnField], keyField, keyValue);
+            })
               .then(function (row) {
                 resolved[fieldName] = (row && row[returnField]) || '';
-                console.log('[LOOKUP] ' + deName + '.' + returnField + ' = ' + resolved[fieldName]);
+                console.log('[LOOKUP] MID=' + mid + ' DE=' + deKey + '.' + returnField + ' = ' + resolved[fieldName]);
               })
               .catch(function (err) {
-                console.error('[LOOKUP] Error for ' + deName + ':', err.message);
+                console.error('[LOOKUP] Error for ' + deKey + ':', err.message);
                 resolved[fieldName] = '';
               })
           );
-        })(key, parts[1], parts[2], parts.slice(3, parts.length - 1).join(':'), parts[parts.length - 1]);
+        })(key, parts[1], parts[2], parts[3], parts.slice(4, parts.length - 1).join(':'), parts[parts.length - 1]);
       }
     } else {
       resolved[key] = val;
@@ -196,8 +199,7 @@ router.post('/execute', async function (req, res) {
       return typeof v === 'string' && v.indexOf('_lookup_:') === 0;
     });
     if (hasLookups && process.env.SFMC_CLIENT_ID) {
-      var token = await sfmcAuth.getAccessToken();
-      payload = await resolveLookups(payload, token);
+      payload = await resolveLookups(payload);
     }
 
     console.log('[EXECUTE] ' + method + ' ' + targetUrl, JSON.stringify(payload));

@@ -81,28 +81,47 @@ router.get('/de-fields', async function (req, res) {
   try {
     var apiBase = process.env.SFMC_API_BASE.replace(/\/+$/, '');
     var token = await sfmcAuth.getAccessToken();
-
-    var resp = await axios.get(
-      apiBase + '/data/v1/customobjectdata/key/' + encodeURIComponent(deKey) + '/rowset?$page=1&$pageSize=1',
-      { headers: { Authorization: 'Bearer ' + token } }
-    );
-
-    var items = resp.data.items || [];
     var fields = [];
-    if (items.length > 0) {
-      var row = items[0];
-      if (row.keys) {
-        Object.keys(row.keys).forEach(function (f) { fields.push(f); });
+
+    // Try 1: get DE definition via dataevents endpoint (returns schema, no data needed)
+    try {
+      var defResp = await axios.get(
+        apiBase + '/hub/v1/dataevents/key:' + encodeURIComponent(deKey),
+        { headers: { Authorization: 'Bearer ' + token } }
+      );
+      console.log('[DE-FIELDS] dataevents response:', JSON.stringify(defResp.data).substring(0, 500));
+      var dataFields = defResp.data.dataFields || defResp.data.fields || [];
+      for (var i = 0; i < dataFields.length; i++) {
+        var fname = dataFields[i].name || dataFields[i].Name || '';
+        if (fname) fields.push(fname);
       }
-      if (row.values) {
-        Object.keys(row.values).forEach(function (f) { fields.push(f); });
+    } catch (e1) {
+      console.log('[DE-FIELDS] dataevents failed:', e1.response ? e1.response.status : e1.message);
+    }
+
+    // Try 2: fallback to reading a row from the DE
+    if (fields.length === 0) {
+      try {
+        var rowResp = await axios.get(
+          apiBase + '/data/v1/customobjectdata/key/' + encodeURIComponent(deKey) + '/rowset?$page=1&$pageSize=1',
+          { headers: { Authorization: 'Bearer ' + token } }
+        );
+        console.log('[DE-FIELDS] rowset response:', JSON.stringify(rowResp.data).substring(0, 500));
+        var items = rowResp.data.items || [];
+        if (items.length > 0) {
+          var row = items[0];
+          if (row.keys) Object.keys(row.keys).forEach(function (f) { fields.push(f); });
+          if (row.values) Object.keys(row.values).forEach(function (f) { fields.push(f); });
+        }
+      } catch (e2) {
+        console.log('[DE-FIELDS] rowset failed:', e2.response ? e2.response.status : e2.message);
       }
     }
 
     console.log('[DE-FIELDS] DE=' + deKey + ' fields=' + fields.join(', '));
     res.json({ fields: fields });
   } catch (err) {
-    console.error('[DE-FIELDS] Error:', err.response ? err.response.status + ' ' + JSON.stringify(err.response.data) : err.message);
+    console.error('[DE-FIELDS] Error:', err.message);
     res.json({ fields: [], error: err.message });
   }
 });
